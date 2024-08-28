@@ -14,7 +14,7 @@ _V4P = ustreamer-v4p.bin
 
 _CFLAGS = -MD -c -std=c17 -Wall -Wextra -D_GNU_SOURCE $(CFLAGS)
 
-_USTR_LDFLAGS = $(LDFLAGS) -lm -ljpeg -pthread -lrt -levent -levent_pthreads -lx264
+_USTR_LDFLAGS = $(LDFLAGS) -lm -ljpeg -pthread -lrt -levent -levent_pthreads
 _DUMP_LDFLAGS = $(LDFLAGS) -lm -ljpeg -pthread -lrt
 _V4P_LDFLAGS = $(LDFLAGS) -lm -ljpeg -pthread -lrt
 
@@ -70,6 +70,12 @@ ifneq ($(MK_WITH_SYSTEMD),)
 override _CFLAGS += -DMK_WITH_SYSTEMD -DWITH_SYSTEMD
 override _USTR_LDFLAGS += -lsystemd
 override _USTR_SRCS += $(shell ls ustreamer/http/systemd/*.c)
+endif
+
+ifneq ($(call optbool,$(WITH_LIBX264)),)
+override _CFLAGS += -DWITH_LIBX264
+override _USTR_LDFLAGS += -lx264
+override _USTR_SRCS += $(shell ls ustreamer/encoders/libx264/*.c)
 endif
 
 ifneq ($(MK_WITH_PTHREAD_NP),)

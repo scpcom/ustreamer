@@ -44,7 +44,9 @@
 #include "../libs/capture.h"
 #include "../libs/unjpeg.h"
 #include "../libs/fpsi.h"
-#include "../libs/x264.h"
+#ifdef WITH_LIBX264
+#	include "../libs/x264.h"
+#endif
 #ifdef WITH_V4P
 #	include "../libs/drm/drm.h"
 #endif
@@ -53,7 +55,9 @@
 #include "encoder.h"
 #include "workers.h"
 #include "m2m.h"
-#include "libx264.h"
+//#ifdef WITH_LIBX264
+#	include "encoders/libx264/libx264.h"
+//#endif
 #ifdef WITH_GPIO
 #	include "gpio/gpio.h"
 #endif
@@ -77,7 +81,6 @@ typedef struct {
 	atomic_bool	*stop;
 } _worker_context_s;
 
-us_libx264_encoder_s libx264_enc;
 static void *_releaser_thread(void *v_ctx);
 #ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx);
@@ -162,8 +165,8 @@ void us_stream_loop(us_stream_s *stream) {
 	us_capture_s *const cap = stream->cap;
 
 	atomic_store(&run->http->last_request_ts, us_get_now_monotonic());
+	printf("type:%d",stream->enc->type);
 	if (stream->h264_sink != NULL) {
-		us_libx264_encoder_init(&libx264_enc, stream->cap->width, stream->cap->height);
 #ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
 #else
@@ -178,6 +181,12 @@ void us_stream_loop(us_stream_s *stream) {
 		run->h264_tmp_src = us_frame_init();
 		run->h264_dest = us_frame_init();
 	}
+#ifdef WITH_LIBX264
+	if (stream->h264_sink != NULL && stream->enc->type == US_ENCODER_TYPE_LIBX264_VIDEO) {
+		printf("us_libx264_encoder_init");
+		us_libx264_encoder_init(&run->libx264_enc, cap->width, cap->height, stream->h264_bitrate, stream->h264_gop);
+	}
+#endif
 
 	while (!_stream_init_loop(stream)) {
 		atomic_bool threads_stop;
@@ -302,6 +311,9 @@ void us_stream_loop(us_stream_s *stream) {
 	US_DELETE(run->h264_enc, us_m2m_encoder_destroy);
 #else
 	kvmv_deinit();
+#endif
+#ifdef WITH_LIBX264
+	if (stream->h264_sink != NULL && stream->enc->type == US_ENCODER_TYPE_LIBX264_VIDEO) us_libx264_encoder_destroy(&run->libx264_enc);
 #endif
 	US_DELETE(run->h264_tmp_src, us_frame_destroy);
 	US_DELETE(run->h264_dest, us_frame_destroy);
@@ -779,13 +791,17 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 		run->h264_key_requested = false;
 		force_key = true;
 	}
-	/*if (!us_m2m_encoder_compress(run->h264_enc, frame, run->h264_dest, force_key)) {
+#ifndef WITH_LIBX264
+	if (!us_m2m_encoder_compress(run->h264_enc, frame, run->h264_dest, force_key)) {
 		meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
-	}*/
-	if (!us_libx264_encoder_compress(&libx264_enc, frame, run->h264_dest, force_key)) ;//{
-		//meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
-	//}
-	
+	}
+#else
+	if (stream->enc->type != US_ENCODER_TYPE_LIBX264_VIDEO && !us_m2m_encoder_compress(run->h264_enc, frame, run->h264_dest, force_key)) {
+		meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
+	}else if (stream->enc->type == US_ENCODER_TYPE_LIBX264_VIDEO && !us_libx264_encoder_compress(&run->libx264_enc, frame, run->h264_dest, force_key)) {
+		meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
+	}
+#endif	
 
 done:
 #else
