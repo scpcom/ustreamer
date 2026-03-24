@@ -179,6 +179,7 @@ int us_capture_parse_io_method(const char *str) {
 int us_capture_open(us_capture_s *cap) {
 	us_capture_runtime_s *const run = cap->run;
 
+#ifndef MK_WITH_AX
 	if (access(cap->path, R_OK | W_OK) < 0) {
 		US_ONCE_FOR(run->open_error_once, -errno, {
 			US_LOG_PERROR("No access to capture device");
@@ -232,6 +233,7 @@ int us_capture_open(us_capture_s *cap) {
 			}
 		}
 	}
+#endif
 	_capture_open_hw_fps(cap);
 	_capture_open_jpeg_quality(cap);
 	if (_capture_open_io_method(cap) < 0) {
@@ -249,11 +251,13 @@ int us_capture_open(us_capture_s *cap) {
 	}
 	_capture_apply_controls(cap);
 
+#ifndef MK_WITH_AX
 	enum v4l2_buf_type type = run->capture_type;
 	if (us_xioctl(run->fd, VIDIOC_STREAMON, &type) < 0) {
 		_LOG_PERROR("Can't start capturing");
 		goto error;
 	}
+#endif
 	run->streamon = true;
 
 	run->open_error_once = 0;
@@ -295,11 +299,13 @@ void us_capture_close(us_capture_s *cap) {
 
 	if (run->streamon) {
 		say = true;
+#ifndef MK_WITH_AX
 		_LOG_DEBUG("Calling VIDIOC_STREAMOFF ...");
 		enum v4l2_buf_type type = run->capture_type;
 		if (us_xioctl(run->fd, VIDIOC_STREAMOFF, &type) < 0) {
 			_LOG_PERROR("Can't stop capturing");
 		}
+#endif
 		run->streamon = false;
 	}
 
@@ -329,7 +335,9 @@ void us_capture_close(us_capture_s *cap) {
 		run->n_bufs = 0;
 	}
 
+#ifndef MK_WITH_AX
 	US_CLOSE_FD(run->fd);
+#endif
 
 	if (say) {
 		_LOG_INFO("Capturing stopped");
@@ -376,9 +384,20 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 			new.m.planes = new_planes;
 		}
 		
+#ifndef MK_WITH_AX
 		const bool new_got = (us_xioctl(run->fd, VIDIOC_DQBUF, &new) >= 0);
+#else
+		int res = 0;
+		const bool new_got = true;
+#endif
 
 		if (new_got) {
+#ifdef MK_WITH_AX
+			new.index = run->cur_index;
+			run->cur_index++;
+			if (run->cur_index >= run->n_bufs) run->cur_index = 0;
+#endif
+
 			if (new.index >= run->n_bufs) {
 				_LOG_ERROR("V4L2 error: grabbed invalid HW buffer=%u, n_bufs=%u", new.index, run->n_bufs);
 				return -1;
@@ -397,6 +416,8 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 				new.bytesused = new.m.planes[0].bytesused;
 			}
 
+
+#ifndef MK_WITH_AX
 			broken = !_capture_is_buffer_valid(cap, &new, FRAME_DATA(new));
 			if (broken) {
 				_LOG_DEBUG("Releasing HW buffer=%u (broken frame) ...", new.index);
@@ -407,12 +428,17 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 				GRABBED(new) = false;
 				continue;
 			}
+#else
+			broken = false;
+#endif
 
 			if (buf_got) {
+#ifndef MK_WITH_AX
 				if (us_xioctl(run->fd, VIDIOC_QBUF, &buf) < 0) {
 					_LOG_PERROR("Can't release HW buffer=%u (skipped frame)", buf.index);
 					return -1;
 				}
+#endif
 				GRABBED(buf) = false;
 				++skipped;
 				// buf_got = false;
@@ -423,9 +449,16 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 
 			_v4l2_buffer_copy(&new, &buf);
 			buf_got = true;
+#ifdef MK_WITH_AX
+			break;
+#endif
 
 		} else {
+#ifndef MK_WITH_AX
 			if (errno == EAGAIN) {
+#else
+			if (res < 0) {
+#endif
 				if (buf_got) {
 					break; // Process any latest valid frame
 				} else if (broken) {
@@ -458,10 +491,12 @@ int us_capture_hwbuf_release(const us_capture_s *cap, us_capture_hwbuf_s *hw) {
 	assert(atomic_load(&hw->refs) == 0);
 	const uint index = hw->buf.index;
 	_LOG_DEBUG("Releasing HW buffer=%u ...", index);
+#ifndef MK_WITH_AX
 	if (us_xioctl(cap->run->fd, VIDIOC_QBUF, &hw->buf) < 0) {
 		_LOG_PERROR("Can't release HW buffer=%u", index);
 		return -1;
 	}
+#endif
 	hw->grabbed = false;
 	_LOG_DEBUG("HW buffer=%u released", index);
 	return 0;
@@ -476,6 +511,7 @@ void us_capture_hwbuf_decref(us_capture_hwbuf_s *hw) {
 }
 
 int _capture_wait_buffer(us_capture_s *cap) {
+#ifndef MK_WITH_AX
 	us_capture_runtime_s *const run = cap->run;
 
 #	define INIT_FD_SET(x_set) \
@@ -516,10 +552,12 @@ int _capture_wait_buffer(us_capture_s *cap) {
 			return -1; // Restart required
 		}
 	}
+#endif
 	return 0;
 }
 
 static int _capture_consume_event(const us_capture_s *cap) {
+#ifndef MK_WITH_AX
 	struct v4l2_event event;
 	if (us_xioctl(cap->run->fd, VIDIOC_DQEVENT, &event) < 0) {
 		_LOG_PERROR("Can't consume V4L2 event");
@@ -533,6 +571,7 @@ static int _capture_consume_event(const us_capture_s *cap) {
 			_LOG_INFO("Got V4L2_EVENT_EOS: End of stream");
 			return -1;
 	}
+#endif
 	return 0;
 }
 
@@ -600,6 +639,7 @@ bool _capture_is_buffer_valid(const us_capture_s *cap, const struct v4l2_buffer 
 static int _capture_open_check_cap(us_capture_s *cap) {
 	us_capture_runtime_s *const run = cap->run;
 
+#ifndef MK_WITH_AX
 	struct v4l2_capability cpb = {0};
 	_LOG_DEBUG("Querying device capabilities ...");
 	if (us_xioctl(run->fd, VIDIOC_QUERYCAP, &cpb) < 0) {
@@ -643,10 +683,16 @@ static int _capture_open_check_cap(us_capture_s *cap) {
 	} else {
 		_LOG_DEBUG("Using TV standard: DEFAULT");
 	}
+#else
+	run->capture_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	run->capture_mplane = false;
+	_LOG_INFO("Using capture type: single-planar");
+#endif
 	return 0;
 }
 
 static int _capture_open_dv_timings(us_capture_s *cap, bool apply) {
+#ifndef MK_WITH_AX
 	// Just probe only if @apply is false
 
 	const us_capture_runtime_s *const run = cap->run;
@@ -725,6 +771,7 @@ subscribe:
 	}
 
 probe_only:
+#endif
 	return 0;
 }
 
@@ -753,6 +800,7 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	// Set format
 	_LOG_DEBUG("Probing device format=%s, stride=%u, resolution=%ux%u ...",
 		_format_to_string_supported(cap->format), stride, run->width, run->height);
+#ifndef MK_WITH_AX
 	if (us_xioctl(run->fd, VIDIOC_S_FMT, &fmt) < 0) {
 		_LOG_PERROR("Can't set device format");
 		return -1;
@@ -778,8 +826,10 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	if (first && retry) {
 		return _capture_open_format(cap, false);
 	}
+#endif
 	_LOG_INFO("Using resolution: %ux%u", run->width, run->height);
 
+#ifndef MK_WITH_AX
 	// Check format
 	if (FMT(pixelformat) != cap->format) {
 		_LOG_ERROR("Could not obtain the requested format=%s; driver gave us %s",
@@ -798,6 +848,9 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	}
 
 	run->format = FMT(pixelformat);
+#else
+	run->format = cap->format;
+#endif
 	_LOG_INFO("Using format: %s", _format_to_string_supported(run->format));
 
 	if (cap->format_swap_rgb) {
@@ -816,11 +869,13 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 		}
 	}
 
+#ifndef MK_WITH_AX
 	run->stride = FMTS(bytesperline);
 	run->raw_size = FMTS(sizeimage); // Only for userptr
 
 #	undef FMTS
 #	undef FMT
+#endif
 
 	return 0;
 }
@@ -828,6 +883,7 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 static void _capture_open_hw_fps(us_capture_s *cap) {
 	us_capture_runtime_s *const run = cap->run;
 
+#ifndef MK_WITH_AX
 	run->hw_fps = 0;
 
 	struct v4l2_streamparm setfps = {.type = run->capture_type};
@@ -869,6 +925,9 @@ static void _capture_open_hw_fps(us_capture_s *cap) {
 	}
 
 	run->hw_fps = SETFPS_TPF(denominator);
+#else
+	run->hw_fps = cap->desired_fps;
+#endif
 	if (cap->desired_fps != run->hw_fps) {
 		_LOG_INFO("Using HW FPS: %u -> %u (coerced)", cap->desired_fps, run->hw_fps);
 	} else {
@@ -882,6 +941,7 @@ static void _capture_open_jpeg_quality(us_capture_s *cap) {
 	us_capture_runtime_s *const run = cap->run;
 	uint quality = 0;
 	if (us_is_jpeg(run->format)) {
+#ifndef MK_WITH_AX
 		struct v4l2_jpegcompression comp = {0};
 		if (us_xioctl(run->fd, VIDIOC_G_JPEGCOMP, &comp) < 0) {
 			_LOG_ERROR("Device doesn't support setting of HW encoding quality parameters");
@@ -893,6 +953,9 @@ static void _capture_open_jpeg_quality(us_capture_s *cap) {
 				quality = cap->jpeg_quality;
 			}
 		}
+#else
+		quality = cap->jpeg_quality;
+#endif
 	}
 	run->jpeg_quality = quality;
 }
@@ -915,11 +978,16 @@ static int _capture_open_io_method_mmap(us_capture_s *cap) {
 		.type = run->capture_type,
 		.memory = V4L2_MEMORY_MMAP,
 	};
+#ifndef MK_WITH_AX
 	_LOG_DEBUG("Requesting %u device buffers for MMAP ...", req.count);
 	if (us_xioctl(run->fd, VIDIOC_REQBUFS, &req) < 0) {
 		_LOG_PERROR("Device '%s' doesn't support MMAP method", cap->path);
 		return -1;
 	}
+#else
+	req.count = cap->n_bufs;
+	run->cur_index = 0;
+#endif
 
 	if (req.count < 1) {
 		_LOG_ERROR("Insufficient buffer memory: %u", req.count);
@@ -943,14 +1011,17 @@ static int _capture_open_io_method_mmap(us_capture_s *cap) {
 			buf.length = VIDEO_MAX_PLANES;
 		}
 
+#ifndef MK_WITH_AX
 		_LOG_DEBUG("Calling us_xioctl(VIDIOC_QUERYBUF) for device buffer=%u ...", run->n_bufs);
 		if (us_xioctl(run->fd, VIDIOC_QUERYBUF, &buf) < 0) {
 			_LOG_PERROR("Can't VIDIOC_QUERYBUF");
 			return -1;
 		}
+#endif
 
 		us_capture_hwbuf_s *hw = &run->bufs[run->n_bufs];
 		atomic_init(&hw->refs, 0);
+#ifndef MK_WITH_AX
 		const uz buf_size = (run->capture_mplane ? buf.m.planes[0].length : buf.length);
 		const off_t buf_offset = (run->capture_mplane ? buf.m.planes[0].m.mem_offset : buf.m.offset);
 
@@ -969,6 +1040,7 @@ static int _capture_open_io_method_mmap(us_capture_s *cap) {
 		if (run->capture_mplane) {
 			US_CALLOC(hw->buf.m.planes, VIDEO_MAX_PLANES);
 		}
+#endif
 
 		hw->dma_fd = -1;
 	}
@@ -983,11 +1055,15 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 		.type = run->capture_type,
 		.memory = V4L2_MEMORY_USERPTR,
 	};
+#ifndef MK_WITH_AX
 	_LOG_DEBUG("Requesting %u device buffers for USERPTR ...", req.count);
 	if (us_xioctl(run->fd, VIDIOC_REQBUFS, &req) < 0) {
 		_LOG_PERROR("Device '%s' doesn't support USERPTR method", cap->path);
 		return -1;
 	}
+#else
+	req.count = 1;
+#endif
 
 	if (req.count < 1) {
 		_LOG_ERROR("Insufficient buffer memory: %u", req.count);
@@ -1005,12 +1081,14 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 
 	for (run->n_bufs = 0; run->n_bufs < req.count; ++run->n_bufs) {
 		us_capture_hwbuf_s *hw = &run->bufs[run->n_bufs];
+#ifndef MK_WITH_AX
 		assert((hw->raw.data = aligned_alloc(page_size, buf_size)) != NULL);
 		memset(hw->raw.data, 0, buf_size);
 		hw->raw.allocated = buf_size;
 		if (run->capture_mplane) {
 			US_CALLOC(hw->buf.m.planes, VIDEO_MAX_PLANES);
 		}
+#endif
 	}
 	return 0;
 }
@@ -1036,16 +1114,19 @@ static int _capture_open_queue_buffers(us_capture_s *cap) {
 			buf.length = run->bufs[index].raw.allocated;
 		}
 
+#ifndef MK_WITH_AX
 		_LOG_DEBUG("Calling us_xioctl(VIDIOC_QBUF) for buffer=%u ...", index);
 		if (us_xioctl(run->fd, VIDIOC_QBUF, &buf) < 0) {
 			_LOG_PERROR("Can't VIDIOC_QBUF");
 			return -1;
 		}
+#endif
 	}
 	return 0;
 }
 
 static int _capture_open_export_to_dma(us_capture_s *cap) {
+#ifndef MK_WITH_AX
 	us_capture_runtime_s *const run = cap->run;
 
 	for (uint index = 0; index < run->n_bufs; ++index) {
@@ -1066,6 +1147,7 @@ error:
 	for (uint index = 0; index < run->n_bufs; ++index) {
 		US_CLOSE_FD(run->bufs[index].dma_fd);
 	}
+#endif
 	return -1;
 }
 
@@ -1146,6 +1228,7 @@ static int _capture_query_control(
 	const us_capture_s *cap, struct v4l2_queryctrl *query,
 	const char *name, uint cid, bool quiet) {
 
+#ifndef MK_WITH_AX
 	// cppcheck-suppress redundantPointerOp
 	US_MEMSET_ZERO(*query);
 	query->id = cid;
@@ -1156,6 +1239,7 @@ static int _capture_query_control(
 		}
 		return -1;
 	}
+#endif
 	return 0;
 }
 
@@ -1171,6 +1255,7 @@ static void _capture_set_control(
 		return;
 	}
 
+#ifndef MK_WITH_AX
 	struct v4l2_control ctl = {
 		.id = cid,
 		.value = value,
@@ -1182,6 +1267,7 @@ static void _capture_set_control(
 	} else if (!quiet) {
 		_LOG_INFO("Applying control %s: %d", name, ctl.value);
 	}
+#endif
 }
 
 static const char *_format_to_string_nullable(uint format) {

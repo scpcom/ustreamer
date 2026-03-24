@@ -54,6 +54,9 @@
 #ifdef WITH_GPIO
 #	include "gpio/gpio.h"
 #endif
+#ifdef MK_WITH_AX
+#include "kvm_vision.h"
+#endif
 
 
 typedef struct {
@@ -154,7 +157,16 @@ void us_stream_loop(us_stream_s *stream) {
 	atomic_store(&run->http->last_request_ts, us_get_now_monotonic());
 
 	if (stream->h264_sink != NULL) {
+#ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
+#else
+		kvmv_hdmi_control(1);
+
+		kvmv_init(0);
+
+		kvmv_set_fps(30);
+		kvmv_set_gop(stream->h264_gop);
+#endif
 		run->h264_tmp_src = us_frame_init();
 		run->h264_dest = us_frame_init();
 	}
@@ -186,7 +198,9 @@ void us_stream_loop(us_stream_s *stream) {
 				x_ctx->stop = &threads_stop; \
 				US_THREAD_CREATE(x_ctx->tid, (x_thread), x_ctx); \
 			}
+#ifndef MK_WITH_AX
 		CREATE_WORKER(true, jpeg_ctx, _jpeg_thread, cap->run->n_bufs);
+#endif
 		CREATE_WORKER((stream->raw_sink != NULL), raw_ctx, _raw_thread, 2);
 		CREATE_WORKER((stream->h264_sink != NULL), h264_ctx, _h264_thread, cap->run->n_bufs);
 #		ifdef WITH_V4P
@@ -215,7 +229,9 @@ void us_stream_loop(us_stream_s *stream) {
 					us_capture_hwbuf_incref(hw); \
 					us_queue_put(x_ctx->queue, hw, 0); \
 				}
+#ifndef MK_WITH_AX
 			QUEUE_HW(jpeg_ctx);
+#endif
 			QUEUE_HW(raw_ctx);
 			QUEUE_HW(h264_ctx);
 #			ifdef WITH_V4P
@@ -248,7 +264,9 @@ void us_stream_loop(us_stream_s *stream) {
 #		endif
 		DELETE_WORKER(h264_ctx);
 		DELETE_WORKER(raw_ctx);
+#ifndef MK_WITH_AX
 		DELETE_WORKER(jpeg_ctx);
+#endif
 #		undef DELETE_WORKER
 
 		for (uint index = 0; index < n_releasers; ++index) {
@@ -260,7 +278,9 @@ void us_stream_loop(us_stream_s *stream) {
 
 		atomic_store(&threads_stop, false);
 
+#ifndef MK_WITH_AX
 		us_encoder_close(stream->enc);
+#endif
 		us_capture_close(cap);
 
 		if (!atomic_load(&run->stop)) {
@@ -268,7 +288,11 @@ void us_stream_loop(us_stream_s *stream) {
 		}
 	}
 
+#ifndef MK_WITH_AX
 	US_DELETE(run->h264_enc, us_m2m_encoder_destroy);
+#else
+	kvmv_deinit();
+#endif
 	US_DELETE(run->h264_tmp_src, us_frame_destroy);
 	US_DELETE(run->h264_dest, us_frame_destroy);
 }
@@ -412,6 +436,7 @@ static void *_h264_thread(void *v_ctx) {
 
 		_stream_encode_expose_h264(ctx->stream, &hw->raw, false);
 
+#ifndef MK_WITH_AX
 		// M2M-енкодер увеличивает задержку на 100 милисекунд при 1080p, если скормить ему больше 30 FPS.
 		// Поэтому у нас есть два режима: 60 FPS для маленьких видео и 30 для 1920x1080(1200).
 		// Следующй фрейм захватывается не раньше, чем это требуется по FPS, минус небольшая
@@ -421,6 +446,7 @@ static void *_h264_thread(void *v_ctx) {
 			const ldf frame_interval = (ldf)1 / fps_limit;
 			grab_after_ts = hw->raw.grab_ts + frame_interval - 0.01;
 		}
+#endif
 
 	decref:
 		us_capture_hwbuf_decref(hw);
@@ -600,7 +626,9 @@ static int _stream_init_loop(us_stream_s *stream) {
 			default:
 				goto verbose_error;
 		}
+#ifndef MK_WITH_AX
 		us_encoder_open(stream->enc, stream->cap);
+#endif
 		return 0;
 
 	silent_error:
@@ -686,6 +714,7 @@ close:
 #endif
 
 static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
+#ifndef MK_WITH_AX
 	us_stream_runtime_s *const run = stream->run;
 	int ri;
 	while ((ri = us_ring_producer_acquire(run->http->jpeg_ring, 0)) < 0) {
@@ -699,6 +728,11 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	if (stream->jpeg_sink != NULL) {
 		us_memsink_server_put(stream->jpeg_sink, dest, NULL);
 	}
+#else
+	if (stream->jpeg_sink != NULL) {
+		us_memsink_server_put(stream->jpeg_sink, frame, NULL);
+	}
+#endif
 }
 
 static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame) {
@@ -712,24 +746,44 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 		return;
 	}
 	us_stream_runtime_s *run = stream->run;
+	us_capture_s *const cap = stream->cap;
 
 	us_fpsi_meta_s meta = {.online = false};
+#ifndef MK_WITH_AX
 	if (us_is_jpeg(frame->format)) {
 		if (us_unjpeg(frame, run->h264_tmp_src, true) < 0) {
 			goto done;
 		}
 		frame = run->h264_tmp_src;
 	}
+#endif
 	if (run->h264_key_requested) {
 		US_LOG_INFO("H264: Requested keyframe by a sink client");
 		run->h264_key_requested = false;
 		force_key = true;
 	}
+#ifndef MK_WITH_AX
 	if (!us_m2m_encoder_compress(run->h264_enc, frame, run->h264_dest, force_key)) {
 		meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
 	}
 
 done:
+#else
+	uint8_t *kvmData = NULL;
+	uint32_t dataSize = 0;
+	int res = kvmv_read_img(cap->run->width, cap->run->height, IMG_H264_TYPE_SPS, stream->h264_bitrate, &kvmData, &dataSize);
+
+	if  (res < 0)
+		goto done;
+
+	run->h264_dest->format = V4L2_PIX_FMT_H264;
+	run->h264_dest->width = cap->run->width;
+	run->h264_dest->height = cap->run->height;
+	us_frame_set_data(run->h264_dest, kvmData, dataSize);
+
+	meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
+done:
+#endif
 	us_fpsi_update(run->http->h264_fpsi, meta.online, &meta);
 }
 

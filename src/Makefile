@@ -87,6 +87,17 @@ ifneq ($(MK_WITH_PDEATHSIG),)
 override _CFLAGS += -DMK_WITH_PDEATHSIG -DWITH_PDEATHSIG
 endif
 
+ifneq ($(MK_WITH_AW),)
+override _CFLAGS += -DMK_WITH_AW -DWITH_AW
+endif
+
+ifneq ($(MK_WITH_AX),)
+override _CFLAGS += -DMK_WITH_AX -DWITH_AX
+override _USTR_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
+override _DUMP_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
+override _V4P_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
+endif
+
 ifneq ($(MK_WITH_V4P),)
 override _TARGETS += $(_V4P)
 override _OBJS += $(_V4P_SRCS:%.c=$(_BUILD)/%.o)

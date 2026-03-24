@@ -631,6 +631,18 @@ static void _features(void) {
 #	else
 	puts("- WITH_PDEATHSIG");
 #	endif
+
+#	ifdef MK_WITH_AW
+	puts("+ WITH_AW");
+#	else
+	puts("- WITH_AW");
+#	endif
+
+#	ifdef MK_WITH_AX
+	puts("+ WITH_AX");
+#	else
+	puts("- WITH_AX");
+#	endif
 }
 
 static void _help(FILE *fp, const us_capture_s *cap, const us_encoder_s *enc, const us_stream_s *stream, const us_server_s *server) {

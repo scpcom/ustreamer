@@ -55,6 +55,7 @@ static const struct {
 	{"M2M-JPEG",	US_ENCODER_TYPE_M2M_IMAGE},
 	{"OMX",			US_ENCODER_TYPE_M2M_IMAGE},
 	{"NOOP",		US_ENCODER_TYPE_CPU},
+	{"AX-VIDEO",		US_ENCODER_TYPE_HW},
 };
 
 

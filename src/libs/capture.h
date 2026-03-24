@@ -68,6 +68,9 @@ typedef struct {
 	bool				capture_mplane;
 	bool				streamon;
 	int					open_error_once;
+#ifdef MK_WITH_AX
+	uint				cur_index;
+#endif
 } us_capture_runtime_s;
 
 typedef enum {
