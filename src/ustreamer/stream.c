@@ -424,17 +424,22 @@ static void *_h264_thread(void *v_ctx) {
 	_worker_context_s *ctx = v_ctx;
 	us_stream_s *stream = ctx->stream;
 
+#ifndef MK_WITH_AX
 	ldf grab_after_ts = 0;
+#endif
 	while (!atomic_load(ctx->stop)) {
+#ifndef MK_WITH_AX
 		us_capture_hwbuf_s *hw = _get_latest_hw(ctx->queue);
 		if (hw == NULL) {
 			continue;
 		}
+#endif
 
 		if (!us_memsink_server_check(stream->h264_sink, NULL)) {
 			US_LOG_VERBOSE("H264: Passed encoding because nobody is watching");
 			goto decref;
 		}
+#ifndef MK_WITH_AX
 		if (hw->raw.grab_ts < grab_after_ts) {
 			US_LOG_DEBUG("H264: Passed encoding for FPS limit");
 			goto decref;
@@ -442,7 +447,6 @@ static void *_h264_thread(void *v_ctx) {
 
 		_stream_encode_expose_h264(ctx->stream, &hw->raw, false);
 
-#ifndef MK_WITH_AX
 		// M2M-енкодер увеличивает задержку на 100 милисекунд при 1080p, если скормить ему больше 30 FPS.
 		// Поэтому у нас есть два режима: 60 FPS для маленьких видео и 30 для 1920x1080(1200).
 		// Следующй фрейм захватывается не раньше, чем это требуется по FPS, минус небольшая
@@ -452,10 +456,14 @@ static void *_h264_thread(void *v_ctx) {
 			const ldf frame_interval = (ldf)1 / fps_limit;
 			grab_after_ts = hw->raw.grab_ts + frame_interval - 0.01;
 		}
+#else
+		_stream_encode_expose_h264(ctx->stream, NULL, false);
 #endif
 
 	decref:
+#ifndef MK_WITH_AX
 		us_capture_hwbuf_decref(hw);
+#endif
 	}
 	return NULL;
 }
