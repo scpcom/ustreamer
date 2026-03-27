@@ -76,7 +76,9 @@ typedef struct {
 
 
 static void *_releaser_thread(void *v_ctx);
+#ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx);
+#endif
 static void *_raw_thread(void *v_ctx);
 static void *_h264_thread(void *v_ctx);
 #ifdef WITH_V4P
@@ -333,6 +335,7 @@ done:
 	return NULL;
 }
 
+#ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_jpeg")
 	_worker_context_s *ctx = v_ctx;
@@ -394,6 +397,7 @@ static void *_jpeg_thread(void *v_ctx) {
 	}
 	return NULL;
 }
+#endif
 
 static void *_raw_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_raw");
