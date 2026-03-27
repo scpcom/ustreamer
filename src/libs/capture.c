@@ -87,11 +87,15 @@ static const struct {
 };
 
 static int _capture_wait_buffer(us_capture_s *cap);
+#ifndef MK_WITH_AX
 static int _capture_consume_event(const us_capture_s *cap);
+#endif
 static void _v4l2_buffer_copy(const struct v4l2_buffer *src, struct v4l2_buffer *dest);
 static bool _capture_is_buffer_valid(const us_capture_s *cap, const struct v4l2_buffer *buf, const u8 *data);
 static int _capture_open_check_cap(us_capture_s *cap);
+#ifndef MK_WITH_AX
 static int _capture_open_dv_timings(us_capture_s *cap, bool apply);
+#endif
 static int _capture_open_format(us_capture_s *cap, bool first);
 static void _capture_open_hw_fps(us_capture_s *cap);
 static void _capture_open_jpeg_quality(us_capture_s *cap);
@@ -99,7 +103,9 @@ static int _capture_open_io_method(us_capture_s *cap);
 static int _capture_open_io_method_mmap(us_capture_s *cap);
 static int _capture_open_io_method_userptr(us_capture_s *cap);
 static int _capture_open_queue_buffers(us_capture_s *cap);
+#ifndef MK_WITH_AX
 static int _capture_open_export_to_dma(us_capture_s *cap);
+#endif
 static int _capture_apply_resolution(us_capture_s *cap, uint width, uint height, float hz);
 
 static void _capture_apply_controls(const us_capture_s *cap);
@@ -112,7 +118,9 @@ static void _capture_set_control(
 
 static const char *_format_to_string_nullable(uint format);
 static const char *_format_to_string_supported(uint format);
+#ifndef MK_WITH_AX
 static const char *_standard_to_string(v4l2_std_id standard);
+#endif
 static const char *_io_method_to_string_supported(enum v4l2_memory io_method);
 
 
@@ -211,6 +219,7 @@ int us_capture_open(us_capture_s *cap) {
 	}
 
 	US_LOG_INFO("Using V4L2 device: %s", cap->path);
+#endif
 
 	if (_capture_open_check_cap(cap) < 0) {
 		goto error;
@@ -218,12 +227,15 @@ int us_capture_open(us_capture_s *cap) {
 	if (_capture_apply_resolution(cap, cap->width, cap->height, cap->run->hz)) {
 		goto error;
 	}
+#ifndef MK_WITH_AX
 	if (cap->dv_timings && _capture_open_dv_timings(cap, true) < 0) {
 		goto error;
 	}
+#endif
 	if (_capture_open_format(cap, true) < 0) {
 		goto error;
 	}
+#ifndef MK_WITH_AX
 	if (cap->dv_timings && cap->persistent) {
 		struct v4l2_control ctl = {.id = TC358743_CID_LANES_ENOUGH};
 		if (!us_xioctl(run->fd, VIDIOC_G_CTRL, &ctl)) {
@@ -242,6 +254,7 @@ int us_capture_open(us_capture_s *cap) {
 	if (_capture_open_queue_buffers(cap) < 0) {
 		goto error;
 	}
+#ifndef MK_WITH_AX
 	if (cap->dma_export && !us_is_jpeg(run->format)) {
 		// uStreamer doesn't have any component that could handle JPEG capture via DMA
 		run->dma = !_capture_open_export_to_dma(cap);
@@ -249,6 +262,7 @@ int us_capture_open(us_capture_s *cap) {
 			goto error;
 		}
 	}
+#endif
 	_capture_apply_controls(cap);
 
 #ifndef MK_WITH_AX
@@ -312,6 +326,7 @@ void us_capture_close(us_capture_s *cap) {
 	if (run->bufs != NULL) {
 		say = true;
 		_LOG_DEBUG("Releasing HW buffers ...");
+#ifndef MK_WITH_AX
 		for (uint index = 0; index < run->n_bufs; ++index) {
 			us_capture_hwbuf_s *hw = &run->bufs[index];
 
@@ -331,6 +346,7 @@ void us_capture_close(us_capture_s *cap) {
 				free(hw->buf.m.planes);
 			}
 		}
+#endif
 		US_DELETE(run->bufs, free);
 		run->n_bufs = 0;
 	}
@@ -556,8 +572,8 @@ int _capture_wait_buffer(us_capture_s *cap) {
 	return 0;
 }
 
-static int _capture_consume_event(const us_capture_s *cap) {
 #ifndef MK_WITH_AX
+static int _capture_consume_event(const us_capture_s *cap) {
 	struct v4l2_event event;
 	if (us_xioctl(cap->run->fd, VIDIOC_DQEVENT, &event) < 0) {
 		_LOG_PERROR("Can't consume V4L2 event");
@@ -571,9 +587,9 @@ static int _capture_consume_event(const us_capture_s *cap) {
 			_LOG_INFO("Got V4L2_EVENT_EOS: End of stream");
 			return -1;
 	}
-#endif
 	return 0;
 }
+#endif
 
 static void _v4l2_buffer_copy(const struct v4l2_buffer *src, struct v4l2_buffer *dest) {
 	struct v4l2_plane *dest_planes = dest->m.planes;
@@ -691,8 +707,8 @@ static int _capture_open_check_cap(us_capture_s *cap) {
 	return 0;
 }
 
-static int _capture_open_dv_timings(us_capture_s *cap, bool apply) {
 #ifndef MK_WITH_AX
+static int _capture_open_dv_timings(us_capture_s *cap, bool apply) {
 	// Just probe only if @apply is false
 
 	const us_capture_runtime_s *const run = cap->run;
@@ -771,13 +787,14 @@ subscribe:
 	}
 
 probe_only:
-#endif
 	return 0;
 }
+#endif
 
 static int _capture_open_format(us_capture_s *cap, bool first) {
 	us_capture_runtime_s *const run = cap->run;
 
+#ifndef MK_WITH_AX
 	const uint stride = us_align_size(run->width, 32) << 1;
 
 	struct v4l2_format fmt = {0};
@@ -800,7 +817,6 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	// Set format
 	_LOG_DEBUG("Probing device format=%s, stride=%u, resolution=%ux%u ...",
 		_format_to_string_supported(cap->format), stride, run->width, run->height);
-#ifndef MK_WITH_AX
 	if (us_xioctl(run->fd, VIDIOC_S_FMT, &fmt) < 0) {
 		_LOG_PERROR("Can't set device format");
 		return -1;
@@ -1001,6 +1017,7 @@ static int _capture_open_io_method_mmap(us_capture_s *cap) {
 	US_CALLOC(run->bufs, req.count);
 
 	for (run->n_bufs = 0; run->n_bufs < req.count; ++run->n_bufs) {
+#ifndef MK_WITH_AX
 		struct v4l2_buffer buf = {0};
 		struct v4l2_plane planes[VIDEO_MAX_PLANES] = {0};
 		buf.type = run->capture_type;
@@ -1011,7 +1028,6 @@ static int _capture_open_io_method_mmap(us_capture_s *cap) {
 			buf.length = VIDEO_MAX_PLANES;
 		}
 
-#ifndef MK_WITH_AX
 		_LOG_DEBUG("Calling us_xioctl(VIDIOC_QUERYBUF) for device buffer=%u ...", run->n_bufs);
 		if (us_xioctl(run->fd, VIDIOC_QUERYBUF, &buf) < 0) {
 			_LOG_PERROR("Can't VIDIOC_QUERYBUF");
@@ -1076,24 +1092,25 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 
 	US_CALLOC(run->bufs, req.count);
 
+#ifndef MK_WITH_AX
 	const uint page_size = getpagesize();
 	const uint buf_size = us_align_size(run->raw_size, page_size);
 
 	for (run->n_bufs = 0; run->n_bufs < req.count; ++run->n_bufs) {
 		us_capture_hwbuf_s *hw = &run->bufs[run->n_bufs];
-#ifndef MK_WITH_AX
 		assert((hw->raw.data = aligned_alloc(page_size, buf_size)) != NULL);
 		memset(hw->raw.data, 0, buf_size);
 		hw->raw.allocated = buf_size;
 		if (run->capture_mplane) {
 			US_CALLOC(hw->buf.m.planes, VIDEO_MAX_PLANES);
 		}
-#endif
 	}
+#endif
 	return 0;
 }
 
 static int _capture_open_queue_buffers(us_capture_s *cap) {
+#ifndef MK_WITH_AX
 	us_capture_runtime_s *const run = cap->run;
 
 	for (uint index = 0; index < run->n_bufs; ++index) {
@@ -1114,19 +1131,18 @@ static int _capture_open_queue_buffers(us_capture_s *cap) {
 			buf.length = run->bufs[index].raw.allocated;
 		}
 
-#ifndef MK_WITH_AX
 		_LOG_DEBUG("Calling us_xioctl(VIDIOC_QBUF) for buffer=%u ...", index);
 		if (us_xioctl(run->fd, VIDIOC_QBUF, &buf) < 0) {
 			_LOG_PERROR("Can't VIDIOC_QBUF");
 			return -1;
 		}
-#endif
 	}
+#endif
 	return 0;
 }
 
-static int _capture_open_export_to_dma(us_capture_s *cap) {
 #ifndef MK_WITH_AX
+static int _capture_open_export_to_dma(us_capture_s *cap) {
 	us_capture_runtime_s *const run = cap->run;
 
 	for (uint index = 0; index < run->n_bufs; ++index) {
@@ -1147,9 +1163,9 @@ error:
 	for (uint index = 0; index < run->n_bufs; ++index) {
 		US_CLOSE_FD(run->bufs[index].dma_fd);
 	}
-#endif
 	return -1;
 }
+#endif
 
 static int _capture_apply_resolution(us_capture_s *cap, uint width, uint height, float hz) {
 	// Тут VIDEO_MIN_* не используются из-за странностей минимального разрешения при отсутствии сигнала
@@ -1284,6 +1300,7 @@ static const char *_format_to_string_supported(uint format) {
 	return (format_str == NULL ? "unsupported" : format_str);
 }
 
+#ifndef MK_WITH_AX
 static const char *_standard_to_string(v4l2_std_id standard) {
 	US_ARRAY_ITERATE(_STANDARDS, 0, item, {
 		if (item->standard == standard) {
@@ -1292,6 +1309,7 @@ static const char *_standard_to_string(v4l2_std_id standard) {
 	});
 	return "???";
 }
+#endif
 
 static const char *_io_method_to_string_supported(enum v4l2_memory io_method) {
 	US_ARRAY_ITERATE(_IO_METHODS, 0, item, {
