@@ -139,8 +139,13 @@ us_capture_s *us_capture_init(void) {
 	us_capture_s *cap;
 	US_CALLOC(cap, 1);
 	cap->path = "/dev/video0";
+#ifndef MK_WITH_AX
 	cap->width = 640;
 	cap->height = 480;
+#else
+	cap->width = 1920;
+	cap->height = 1080;
+#endif
 	cap->format = V4L2_PIX_FMT_YUYV;
 	cap->jpeg_quality = 80;
 	cap->standard = V4L2_STD_UNKNOWN;
