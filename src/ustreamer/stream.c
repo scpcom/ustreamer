@@ -168,8 +168,7 @@ void us_stream_loop(us_stream_s *stream) {
 
 		kvmv_init(0);
 
-		if (cap->desired_fps > 0)
-			kvmv_set_fps(cap->desired_fps);
+		kvmv_set_fps(cap->desired_fps > 0 ? cap->desired_fps : 60);
 
 		kvmv_set_gop(stream->h264_gop);
 #endif
