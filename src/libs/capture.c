@@ -429,10 +429,12 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 #			define GRABBED(x_buf) run->bufs[x_buf.index].grabbed
 #			define FRAME_DATA(x_buf) run->bufs[x_buf.index].raw.data
 
+#ifndef MK_WITH_AX
 			if (GRABBED(new)) {
 				_LOG_ERROR("V4L2 error: grabbed HW buffer=%u is already used", new.index);
 				return -1;
 			}
+#endif
 			GRABBED(new) = true;
 
 			if (run->capture_mplane) {
