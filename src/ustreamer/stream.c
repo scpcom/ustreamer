@@ -772,13 +772,11 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 		}
 		frame = run->h264_tmp_src;
 	}
-#endif
 	if (run->h264_key_requested) {
 		US_LOG_INFO("H264: Requested keyframe by a sink client");
 		run->h264_key_requested = false;
 		force_key = true;
 	}
-#ifndef MK_WITH_AX
 	if (!us_m2m_encoder_compress(run->h264_enc, frame, run->h264_dest, force_key)) {
 		meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
 	}
@@ -792,6 +790,7 @@ done:
 	if  (res < 0)
 		goto done;
 
+	run->h264_key_requested = false;
 	run->h264_dest->format = V4L2_PIX_FMT_H264;
 	run->h264_dest->width = cap->run->width;
 	run->h264_dest->height = cap->run->height;
