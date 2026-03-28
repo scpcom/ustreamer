@@ -238,8 +238,10 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 			QUEUE_HW(jpeg_ctx);
 			QUEUE_HW(raw_ctx);
-#endif
 			QUEUE_HW(h264_ctx);
+#else
+			us_queue_put(h264_ctx->queue, hw, 0);
+#endif
 #			ifdef WITH_V4P
 			QUEUE_HW(drm_ctx);
 #			endif
