@@ -78,8 +78,8 @@ typedef struct {
 static void *_releaser_thread(void *v_ctx);
 #ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx);
-#endif
 static void *_raw_thread(void *v_ctx);
+#endif
 static void *_h264_thread(void *v_ctx);
 #ifdef WITH_V4P
 static void *_drm_thread(void *v_ctx);
@@ -94,8 +94,10 @@ static void _stream_update_captured_fpsi(us_stream_s *stream, const us_frame_s *
 #ifdef WITH_V4P
 static void _stream_drm_ensure_no_signal(us_stream_s *stream);
 #endif
+#ifndef MK_WITH_AX
 static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame);
 static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame);
+#endif
 static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *frame, bool force_key);
 static void _stream_check_suicide(us_stream_s *stream);
 
@@ -204,8 +206,8 @@ void us_stream_loop(us_stream_s *stream) {
 			}
 #ifndef MK_WITH_AX
 		CREATE_WORKER(true, jpeg_ctx, _jpeg_thread, cap->run->n_bufs);
-#endif
 		CREATE_WORKER((stream->raw_sink != NULL), raw_ctx, _raw_thread, 2);
+#endif
 		CREATE_WORKER((stream->h264_sink != NULL), h264_ctx, _h264_thread, cap->run->n_bufs);
 #		ifdef WITH_V4P
 		CREATE_WORKER((stream->drm != NULL), drm_ctx, _drm_thread, cap->run->n_bufs); // cppcheck-suppress assertWithSideEffect
@@ -235,8 +237,8 @@ void us_stream_loop(us_stream_s *stream) {
 				}
 #ifndef MK_WITH_AX
 			QUEUE_HW(jpeg_ctx);
-#endif
 			QUEUE_HW(raw_ctx);
+#endif
 			QUEUE_HW(h264_ctx);
 #			ifdef WITH_V4P
 			QUEUE_HW(drm_ctx);
@@ -267,8 +269,8 @@ void us_stream_loop(us_stream_s *stream) {
 		DELETE_WORKER(drm_ctx);
 #		endif
 		DELETE_WORKER(h264_ctx);
-		DELETE_WORKER(raw_ctx);
 #ifndef MK_WITH_AX
+		DELETE_WORKER(raw_ctx);
 		DELETE_WORKER(jpeg_ctx);
 #endif
 #		undef DELETE_WORKER
@@ -397,7 +399,6 @@ static void *_jpeg_thread(void *v_ctx) {
 	}
 	return NULL;
 }
-#endif
 
 static void *_raw_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_raw");
@@ -418,6 +419,7 @@ static void *_raw_thread(void *v_ctx) {
 	}
 	return NULL;
 }
+#endif
 
 static void *_h264_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_h264");
@@ -675,8 +677,10 @@ static int _stream_init_loop(us_stream_s *stream) {
 				us_blank_draw(run->blank, blank_reason, width, height);
 
 				_stream_update_captured_fpsi(stream, run->blank->raw, false);
+#ifndef MK_WITH_AX
 				_stream_expose_jpeg(stream, run->blank->jpeg);
 				_stream_expose_raw(stream, run->blank->raw);
+#endif
 				_stream_encode_expose_h264(stream, run->blank->raw, true);
 
 #				ifdef WITH_V4P
@@ -727,8 +731,8 @@ close:
 }
 #endif
 
-static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 #ifndef MK_WITH_AX
+static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	us_stream_runtime_s *const run = stream->run;
 	int ri;
 	while ((ri = us_ring_producer_acquire(run->http->jpeg_ring, 0)) < 0) {
@@ -742,11 +746,6 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	if (stream->jpeg_sink != NULL) {
 		us_memsink_server_put(stream->jpeg_sink, dest, NULL);
 	}
-#else
-	if (stream->jpeg_sink != NULL) {
-		us_memsink_server_put(stream->jpeg_sink, frame, NULL);
-	}
-#endif
 }
 
 static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame) {
@@ -754,6 +753,7 @@ static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame) {
 		us_memsink_server_put(stream->raw_sink, frame, NULL);
 	}
 }
+#endif
 
 static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *frame, bool force_key) {
 	if (stream->h264_sink == NULL) {
