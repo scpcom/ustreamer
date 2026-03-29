@@ -817,7 +817,12 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 kvmv:
 	uint8_t *kvmData = NULL;
 	uint32_t dataSize = 0;
-	int res = kvmv_read_img(cap->run->width, cap->run->height, IMG_H264_TYPE_SPS, stream->h264_bitrate, &kvmData, &dataSize);
+	int res = -1;
+
+	run->h264_tmp_src->used = 1;
+	us_frame_encoding_begin(run->h264_tmp_src, run->h264_dest, V4L2_PIX_FMT_H264);
+	run->h264_tmp_src->used = 0;
+	res = kvmv_read_img(cap->run->width, cap->run->height, IMG_H264_TYPE_SPS, stream->h264_bitrate, &kvmData, &dataSize);
 
 	if  (res < 0) {
 #ifdef WITH_LIBX264
@@ -847,7 +852,12 @@ kvmv:
 	run->h264_dest->format = V4L2_PIX_FMT_H264;
 	run->h264_dest->width = cap->run->width;
 	run->h264_dest->height = cap->run->height;
+	run->h264_dest->online = true;
+	run->h264_dest->key = (res == 4);
+	run->h264_dest->gop = stream->h264_gop;
 	us_frame_set_data(run->h264_dest, kvmData, dataSize);
+	us_frame_encoding_end(run->h264_dest);
+	run->h264_tmp_src->grab_ts = run->h264_dest->encode_end_ts;
 
 	meta.online = !us_memsink_server_put(stream->h264_sink, run->h264_dest, &run->h264_key_requested);
 #endif
