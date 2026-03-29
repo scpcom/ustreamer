@@ -22,6 +22,7 @@ WITH_SYSTEMD ?= 0
 WITH_PTHREAD_NP ?= 1
 WITH_SETPROCTITLE ?= 1
 WITH_PDEATHSIG ?= 1
+WITH_LIBX264 ?= 0
 WITH_AW ?= 0
 WITH_AX ?= 1
 
@@ -36,6 +37,7 @@ MK_WITH_SYSTEMD = $(call optbool,$(WITH_SYSTEMD))
 MK_WITH_PTHREAD_NP = $(call optbool,$(WITH_PTHREAD_NP))
 MK_WITH_SETPROCTITLE = $(call optbool,$(WITH_SETPROCTITLE))
 MK_WITH_PDEATHSIG = $(call optbool,$(WITH_PDEATHSIG))
+MK_WITH_LIBX264 = $(call optbool,$(WITH_LIBX264))
 MK_WITH_AW = $(call optbool,$(WITH_AW))
 MK_WITH_AX = $(call optbool,$(WITH_AX))
 
