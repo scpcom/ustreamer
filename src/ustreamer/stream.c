@@ -818,10 +818,11 @@ kvmv:
 	uint8_t *kvmData = NULL;
 	uint32_t dataSize = 0;
 	int res = -1;
+	uz src_used = run->h264_tmp_src->used;
 
-	run->h264_tmp_src->used = 1;
+	if (src_used < 1) run->h264_tmp_src->used = 1;
 	us_frame_encoding_begin(run->h264_tmp_src, run->h264_dest, V4L2_PIX_FMT_H264);
-	run->h264_tmp_src->used = 0;
+	run->h264_tmp_src->used = src_used;
 	res = kvmv_read_img(cap->run->width, cap->run->height, IMG_H264_TYPE_SPS, stream->h264_bitrate, &kvmData, &dataSize);
 
 	if  (res < 0) {
