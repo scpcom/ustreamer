@@ -721,6 +721,28 @@ static void _stream_update_captured_fpsi(us_stream_s *stream, const us_frame_s *
 	}
 }
 
+#ifdef MK_WITH_AX
+static void us_kvmv_stream_update_blank(us_stream_s *stream) {
+	us_stream_runtime_s *run = stream->run;
+	const char *blank_reason = (
+		"< NO SIGNAL DETECTED >\n \n"
+		"   Possible reasons:  \n \n"
+		"   - Video suspended  \n \n"
+		"   - Cable problems   "
+	);
+
+	uint width = stream->cap->run->width;
+	uint height = stream->cap->run->height;
+	if (width == 0 || height == 0) {
+		width = stream->cap->width;
+		height = stream->cap->height;
+	}
+	us_blank_draw(run->blank, blank_reason, width, height);
+
+	_stream_update_captured_fpsi(stream, run->blank->raw, false);
+}
+#endif
+
 #ifdef WITH_V4P
 static void _stream_drm_ensure_no_signal(us_stream_s *stream) {
 	if (stream->drm == NULL) {
@@ -827,23 +849,9 @@ kvmv:
 
 	if  (res < 0) {
 #ifdef WITH_LIBX264
-		const char *blank_reason = (
-			"< NO SIGNAL DETECTED >\n \n"
-			"   Possible reasons:  \n \n"
-			"   - Video suspended  \n \n"
-			"   - Cable problems   "
-		);
-
-		uint width = stream->cap->run->width;
-		uint height = stream->cap->run->height;
-		if (width == 0 || height == 0) {
-			width = stream->cap->width;
-			height = stream->cap->height;
-		}
-		us_blank_draw(run->blank, blank_reason, width, height);
-
-		_stream_update_captured_fpsi(stream, run->blank->raw, false);
-		return _stream_encode_expose_h264(stream, run->blank->raw, true);
+		us_kvmv_stream_update_blank(stream);
+		_stream_encode_expose_h264(stream, run->blank->raw, true);
+		return;
 #else
 		goto done;
 #endif
