@@ -82,8 +82,8 @@ typedef struct {
 } _worker_context_s;
 
 static void *_releaser_thread(void *v_ctx);
-#ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx);
+#ifndef MK_WITH_AX
 static void *_raw_thread(void *v_ctx);
 #endif
 static void *_h264_thread(void *v_ctx);
@@ -100,8 +100,8 @@ static void _stream_update_captured_fpsi(us_stream_s *stream, const us_frame_s *
 #ifdef WITH_V4P
 static void _stream_drm_ensure_no_signal(us_stream_s *stream);
 #endif
-#ifndef MK_WITH_AX
 static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame);
+#ifndef MK_WITH_AX
 static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame);
 #endif
 static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *frame, bool force_key);
@@ -214,8 +214,8 @@ void us_stream_loop(us_stream_s *stream) {
 				x_ctx->stop = &threads_stop; \
 				US_THREAD_CREATE(x_ctx->tid, (x_thread), x_ctx); \
 			}
-#ifndef MK_WITH_AX
 		CREATE_WORKER(true, jpeg_ctx, _jpeg_thread, cap->run->n_bufs);
+#ifndef MK_WITH_AX
 		CREATE_WORKER((stream->raw_sink != NULL), raw_ctx, _raw_thread, 2);
 #endif
 		CREATE_WORKER((stream->h264_sink != NULL), h264_ctx, _h264_thread, cap->run->n_bufs);
@@ -250,6 +250,7 @@ void us_stream_loop(us_stream_s *stream) {
 			QUEUE_HW(raw_ctx);
 			QUEUE_HW(h264_ctx);
 #else
+			us_queue_put(jpeg_ctx->queue, hw, 0);
 			us_queue_put(h264_ctx->queue, hw, 0);
 #endif
 #			ifdef WITH_V4P
@@ -283,8 +284,8 @@ void us_stream_loop(us_stream_s *stream) {
 		DELETE_WORKER(h264_ctx);
 #ifndef MK_WITH_AX
 		DELETE_WORKER(raw_ctx);
-		DELETE_WORKER(jpeg_ctx);
 #endif
+		DELETE_WORKER(jpeg_ctx);
 #		undef DELETE_WORKER
 
 		for (uint index = 0; index < n_releasers; ++index) {
@@ -352,16 +353,18 @@ done:
 	return NULL;
 }
 
-#ifndef MK_WITH_AX
 static void *_jpeg_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_jpeg")
 	_worker_context_s *ctx = v_ctx;
 	us_stream_s *stream = ctx->stream;
 
+#ifndef MK_WITH_AX
 	ldf grab_after_ts = 0;
 	uint fluency_passed = 0;
+#endif
 
 	while (!atomic_load(ctx->stop)) {
+#ifndef MK_WITH_AX
 		us_worker_s *const wr = us_workers_pool_wait(stream->enc->run->pool);
 		us_encoder_job_s *const job = wr->job;
 
@@ -386,14 +389,18 @@ static void *_jpeg_thread(void *v_ctx) {
 		if (hw == NULL) {
 			continue;
 		}
+#endif
 
 		const bool update_required = (stream->jpeg_sink != NULL && us_memsink_server_check(stream->jpeg_sink, NULL));
 		if (!update_required && !_stream_has_jpeg_clients_cached(stream)) {
 			US_LOG_VERBOSE("JPEG: Passed encoding because nobody is watching");
+#ifndef MK_WITH_AX
 			us_capture_hwbuf_decref(hw);
+#endif
 			continue;
 		}
 
+#ifndef MK_WITH_AX
 		const ldf now_ts = us_get_now_monotonic();
 		if (now_ts < grab_after_ts) {
 			fluency_passed += 1;
@@ -411,10 +418,14 @@ static void *_jpeg_thread(void *v_ctx) {
 		job->hw = hw;
 		us_workers_pool_assign(stream->enc->run->pool, wr);
 		US_LOG_DEBUG("JPEG: Assigned new frame in buffer=%d to worker=%s", hw->buf.index, wr->name);
+#else
+		_stream_expose_jpeg(stream, NULL);
+#endif
 	}
 	return NULL;
 }
 
+#ifndef MK_WITH_AX
 static void *_raw_thread(void *v_ctx) {
 	US_THREAD_SETTLE("str_raw");
 	_worker_context_s *ctx = v_ctx;
@@ -692,8 +703,8 @@ static int _stream_init_loop(us_stream_s *stream) {
 				us_blank_draw(run->blank, blank_reason, width, height);
 
 				_stream_update_captured_fpsi(stream, run->blank->raw, false);
-#ifndef MK_WITH_AX
 				_stream_expose_jpeg(stream, run->blank->jpeg);
+#ifndef MK_WITH_AX
 				_stream_expose_raw(stream, run->blank->raw);
 #endif
 				_stream_encode_expose_h264(stream, run->blank->raw, true);
@@ -768,7 +779,6 @@ close:
 }
 #endif
 
-#ifndef MK_WITH_AX
 static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	us_stream_runtime_s *const run = stream->run;
 	int ri;
@@ -778,13 +788,44 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 		}
 	}
 	us_frame_s *const dest = run->http->jpeg_ring->items[ri];
+#ifdef MK_WITH_AX
+	us_capture_s *const cap = stream->cap;
+	if (!frame)
+		goto kvmv;
+#endif
 	us_frame_copy(frame, dest);
+#ifdef MK_WITH_AX
+	goto done;
+kvmv:
+	uint8_t *kvmData = NULL;
+	uint32_t dataSize = 0;
+	int res = -1;
+#ifdef MK_WITH_AX_MJPEG
+	res = kvmv_read_img(cap->run->width, cap->run->height, IMG_MJPEG_TYPE, cap->jpeg_quality, &kvmData, &dataSize);
+#endif
+
+	if  (res < 0) {
+		us_kvmv_stream_update_blank(stream);
+		us_ring_producer_release(run->http->jpeg_ring, ri);
+		_stream_expose_jpeg(stream, run->blank->jpeg);
+		return;
+	}
+
+	cap->run->jpeg_quality = cap->jpeg_quality;
+	dest->format = V4L2_PIX_FMT_MJPEG;
+	dest->width = cap->run->width;
+	dest->height = cap->run->height;
+	dest->online = true;
+	us_frame_set_data(dest, kvmData, dataSize);
+done:
+#endif
 	us_ring_producer_release(run->http->jpeg_ring, ri);
 	if (stream->jpeg_sink != NULL) {
 		us_memsink_server_put(stream->jpeg_sink, dest, NULL);
 	}
 }
 
+#ifndef MK_WITH_AX
 static void _stream_expose_raw(us_stream_s *stream, const us_frame_s *frame) {
 	if (stream->raw_sink != NULL) {
 		us_memsink_server_put(stream->raw_sink, frame, NULL);
