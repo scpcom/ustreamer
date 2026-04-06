@@ -500,7 +500,7 @@ int us_ax_enable_stream(VENC_CHN VencChn)
 	stRecvParam.s32RecvPicNum = -1;
 	s32Ret = AX_VENC_StartRecvFrame(VencChn, &stRecvParam);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGI("AX_VENC_StartRecvFrame failed, s32Ret:0x%x\n", s32Ret);
+		AXV_LOGI("VencChn %d: AX_VENC_StartRecvFrame failed, s32Ret:0x%x\n", VencChn, s32Ret);
 		return -1;
 	}
 	return 0;
@@ -510,7 +510,7 @@ int us_ax_disable_stream(VENC_CHN VencChn)
 {
 	AX_S32 s32Ret = AX_VENC_StopRecvFrame(VencChn);
 	if (0 != s32Ret) {
-		AXV_LOGE("VencChn %d:AX_VENC_StopRecvFrame failed,s32Ret:0x%x\n", 0, s32Ret);
+		AXV_LOGE("VencChn %d: AX_VENC_StopRecvFrame failed, s32Ret:0x%x\n", VencChn, s32Ret);
 		return -1;
 	}
 	return 0;
@@ -528,11 +528,11 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 	if (AX_SUCCESS == s32Ret) {
 		AX_BOOL bIFrame = (AX_VENC_INTRA_FRAME == stStream.stPack.enCodingType) ? AX_TRUE : AX_FALSE;
 		us_frame_set_data(frame, stStream.stPack.pu8Addr, stStream.stPack.u32Len);
-		// AXV_LOGI("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d\n", 2, stStream.stPack.u64PTS,
+		// AXV_LOGI("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d\n", VencChn, stStream.stPack.u64PTS,
 		// 	stStream.stPack.pu8Addr, stStream.stPack.u32Len, stStream.stPack.enCodingType);
 		s32Ret = AX_VENC_ReleaseStream(VencChn, &stStream);
 		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("VencChn %d: AX_VENC_ReleaseStream failed!s32Ret:0x%x\n", 0, s32Ret);
+			AXV_LOGE("VencChn %d: AX_VENC_ReleaseStream failed! s32Ret:0x%x\n", VencChn, s32Ret);
 			usleep(10000);
 			return -1;
 		}
@@ -541,13 +541,14 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 		}
 		return 0;
 	} else if (AX_ERR_VENC_FLOW_END == s32Ret) {
-		AXV_LOGE("VencChn %d: AX_VENC_GetStream end flow,exit!\n", 0);
+		AXV_LOGE("VencChn %d: AX_VENC_GetStream end flow, exit!\n", VencChn);
 		usleep(10000);
 		return -1;
 	} else if (AX_ERR_VENC_QUEUE_EMPTY == s32Ret) {
-		AXV_LOGI("VencChn %d: AX_VENC_GetStream queue empty\n", 0);
+		//AXV_LOGI("VencChn %d: AX_VENC_GetStream queue empty\n", VencChn);
+		return -1;
 	} else {
-		printf("s32Ret = 0x%x\n", s32Ret);
+		printf("VencChn %d: AX_VENC_GetStream failed, s32Ret:0x%x\n", VencChn, s32Ret);
 	}
 	return -1;
 }
