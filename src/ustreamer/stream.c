@@ -173,7 +173,12 @@ void us_stream_loop(us_stream_s *stream) {
 		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps > 0 ? cap->desired_fps : 60, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
 		if (ax_enc) {
 			run->h264_enc = (us_m2m_encoder_s *)ax_enc;
-			us_ax_enable_stream(ax_enc->venc_h264_chn);
+			if (ax_enc->venc_h264_run_) {
+				us_ax_enable_stream(ax_enc->venc_h264_chn);
+			}
+			if (ax_enc->venc_jpeg_run_) {
+				us_ax_enable_stream(ax_enc->venc_jpeg_chn);
+			}
 		}
 #endif
 		run->h264_tmp_src = us_frame_init();
@@ -310,7 +315,12 @@ void us_stream_loop(us_stream_s *stream) {
 #else
 	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
 	if (ax_enc) {
-		us_ax_disable_stream(ax_enc->venc_h264_chn);
+		if (ax_enc->venc_jpeg_run_) {
+			us_ax_disable_stream(ax_enc->venc_jpeg_chn);
+		}
+		if (ax_enc->venc_h264_run_) {
+			us_ax_disable_stream(ax_enc->venc_h264_chn);
+		}
 		us_ax_encoder_destroy(ax_enc);
 	}
 #endif
@@ -800,10 +810,8 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	goto done;
 axv:
 	int res = -1;
-#ifdef MK_WITH_AX_MJPEG
 	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
 	res = us_ax_get_mjpeg_frame(ax_enc, dest);
-#endif
 
 	if  (res < 0) {
 		us_ax_stream_update_blank(stream);
