@@ -801,7 +801,7 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 axv:
 	int res = -1;
 #ifdef MK_WITH_AX_MJPEG
-	us_ax_encoder_s *ax_enc = run->h264_enc;
+	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
 	res = us_ax_get_mjpeg_frame(ax_enc, dest);
 #endif
 
