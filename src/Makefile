@@ -98,10 +98,11 @@ override _CFLAGS += -DMK_WITH_AW -DWITH_AW
 endif
 
 ifneq ($(MK_WITH_AX),)
-override _CFLAGS += -DMK_WITH_AX -DWITH_AX
-override _USTR_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
-override _DUMP_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
-override _V4P_LDFLAGS += -Wl,-rpath=/kvmapp/server/dl_lib -L/kvmapp/server/dl_lib -L/opt/lib -lkvm
+override _CFLAGS += -DMK_WITH_AX -DWITH_AX -I/opt/include
+override _USTR_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
+override _DUMP_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
+override _V4P_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
+override _USTR_SRCS += $(shell ls ustreamer/encoders/ax_hw/*.c)
 endif
 
 ifneq ($(MK_WITH_V4P),)

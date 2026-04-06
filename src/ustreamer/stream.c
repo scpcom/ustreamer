@@ -62,7 +62,7 @@
 #	include "gpio/gpio.h"
 #endif
 #ifdef MK_WITH_AX
-#include "kvm_vision.h"
+#	include "encoders/ax_hw/ax_encoder.h"
 #endif
 
 
@@ -170,13 +170,11 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
 #else
-		kvmv_hdmi_control(1);
-
-		kvmv_init(0);
-
-		kvmv_set_fps(cap->desired_fps > 0 ? cap->desired_fps : 60);
-
-		kvmv_set_gop(stream->h264_gop);
+		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps > 0 ? cap->desired_fps : 60, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
+		if (ax_enc) {
+			run->h264_enc = (us_m2m_encoder_s *)ax_enc;
+			us_ax_enable_stream(ax_enc->venc_h264_chn);
+		}
 #endif
 		run->h264_tmp_src = us_frame_init();
 		run->h264_dest = us_frame_init();
@@ -310,7 +308,11 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 	US_DELETE(run->h264_enc, us_m2m_encoder_destroy);
 #else
-	kvmv_deinit();
+	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
+	if (ax_enc) {
+		us_ax_disable_stream(ax_enc->venc_h264_chn);
+		us_ax_encoder_destroy(ax_enc);
+	}
 #endif
 #ifdef WITH_LIBX264
 	if (stream->h264_sink != NULL) us_libx264_encoder_destroy(&run->libx264_enc);
@@ -733,7 +735,7 @@ static void _stream_update_captured_fpsi(us_stream_s *stream, const us_frame_s *
 }
 
 #ifdef MK_WITH_AX
-static void us_kvmv_stream_update_blank(us_stream_s *stream) {
+static void us_ax_stream_update_blank(us_stream_s *stream) {
 	us_stream_runtime_s *run = stream->run;
 	const char *blank_reason = (
 		"< NO SIGNAL DETECTED >\n \n"
@@ -791,21 +793,20 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 #ifdef MK_WITH_AX
 	us_capture_s *const cap = stream->cap;
 	if (!frame)
-		goto kvmv;
+		goto axv;
 #endif
 	us_frame_copy(frame, dest);
 #ifdef MK_WITH_AX
 	goto done;
-kvmv:
-	uint8_t *kvmData = NULL;
-	uint32_t dataSize = 0;
+axv:
 	int res = -1;
 #ifdef MK_WITH_AX_MJPEG
-	res = kvmv_read_img(cap->run->width, cap->run->height, IMG_MJPEG_TYPE, cap->jpeg_quality, &kvmData, &dataSize);
+	us_ax_encoder_s *ax_enc = run->h264_enc;
+	res = us_ax_get_mjpeg_frame(ax_enc, dest);
 #endif
 
 	if  (res < 0) {
-		us_kvmv_stream_update_blank(stream);
+		us_ax_stream_update_blank(stream);
 		us_ring_producer_release(run->http->jpeg_ring, ri);
 		_stream_expose_jpeg(stream, run->blank->jpeg);
 		return;
@@ -816,7 +817,6 @@ kvmv:
 	dest->width = cap->run->width;
 	dest->height = cap->run->height;
 	dest->online = true;
-	us_frame_set_data(dest, kvmData, dataSize);
 done:
 #endif
 	us_ring_producer_release(run->http->jpeg_ring, ri);
@@ -845,7 +845,7 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 #ifdef WITH_LIBX264
 	if (!frame)
 #endif
-		goto kvmv;
+		goto axv;
 #endif
 	if (us_is_jpeg(frame->format)) {
 		if (us_unjpeg(frame, run->h264_tmp_src, true) < 0) {
@@ -877,20 +877,19 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 #endif	
 #ifdef MK_WITH_AX
 	goto done;
-kvmv:
-	uint8_t *kvmData = NULL;
-	uint32_t dataSize = 0;
+axv:
 	int res = -1;
+	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
 	uz src_used = run->h264_tmp_src->used;
 
 	if (src_used < 1) run->h264_tmp_src->used = 1;
 	us_frame_encoding_begin(run->h264_tmp_src, run->h264_dest, V4L2_PIX_FMT_H264);
 	run->h264_tmp_src->used = src_used;
-	res = kvmv_read_img(cap->run->width, cap->run->height, IMG_H264_TYPE_SPS, stream->h264_bitrate, &kvmData, &dataSize);
+	res = us_ax_get_h264_frame(ax_enc, run->h264_dest, false);
 
 	if  (res < 0) {
 #ifdef WITH_LIBX264
-		us_kvmv_stream_update_blank(stream);
+		us_ax_stream_update_blank(stream);
 		_stream_encode_expose_h264(stream, run->blank->raw, true);
 		return;
 #else
@@ -905,7 +904,6 @@ kvmv:
 	run->h264_dest->online = true;
 	run->h264_dest->key = (res == 4);
 	run->h264_dest->gop = stream->h264_gop;
-	us_frame_set_data(run->h264_dest, kvmData, dataSize);
 	us_frame_encoding_end(run->h264_dest);
 	run->h264_tmp_src->grab_ts = run->h264_dest->encode_end_ts;
 
