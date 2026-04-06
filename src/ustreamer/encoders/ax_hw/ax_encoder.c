@@ -453,6 +453,9 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 			usleep(10000);
 			return -1;
 		}
+		if (bIFrame) {
+			return 3;
+		}
 		return 0;
 	} else if (AX_ERR_VENC_FLOW_END == s32Ret) {
 		AXV_LOGE("VencChn %d: AX_VENC_GetStream end flow,exit!\n", 0);
@@ -467,10 +470,14 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 }
 
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key) {
+	int res;
 	VENC_CHN VencChn = ax_enc->venc_h264_chn;
 	if (force_key)
 		us_ax_request_key_frame(VencChn);
-	return us_ax_get_stream_frame(VencChn, frame);
+	res = us_ax_get_stream_frame(VencChn, frame);
+	if (res == 0)
+		return 4;
+	return res;
 }
 
 int us_ax_get_mjpeg_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame) {
