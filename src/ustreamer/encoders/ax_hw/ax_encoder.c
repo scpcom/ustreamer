@@ -288,9 +288,6 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 
 	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
 
-	stVencChnAttr.stVencAttr.enMemSource = AX_MEMORY_SOURCE_CMM;
-	stVencChnAttr.stVencAttr.enLevel = AX_VENC_H264_LEVEL_4_2;
-	stVencChnAttr.stVencAttr.enTier = AX_VENC_HEVC_MAIN_TIER;
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.s32Y = 0;
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.u32Width = 0;
 	stVencChnAttr.stVencAttr.stCropCfg.bEnable = AX_FALSE;
@@ -298,41 +295,47 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.u32Height = 0;
 	stVencChnAttr.stVencAttr.enRotation = AX_ROTATION_0;
 
-	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
-
+	stVencChnAttr.stVencAttr.enMemSource = AX_MEMORY_SOURCE_CMM;
 	stVencChnAttr.stVencAttr.enType = PT_H264;
-	stVencChnAttr.stVencAttr.u32MaxPicWidth = 0xf00;
-	stVencChnAttr.stVencAttr.u32MaxPicHeight = 0x960;
-	stVencChnAttr.stVencAttr.u32BufSize = 0xd2f000;
+	stVencChnAttr.stVencAttr.enLevel = AX_VENC_H264_LEVEL_4_2;
 	stVencChnAttr.stVencAttr.enProfile = AX_VENC_H264_MAIN_PROFILE;
+	stVencChnAttr.stVencAttr.enTier = AX_VENC_HEVC_MAIN_TIER;
+
+	stVencChnAttr.stVencAttr.u32MaxPicWidth = 3840;
+	stVencChnAttr.stVencAttr.u32MaxPicHeight = 2400;
+	stVencChnAttr.stVencAttr.u32BufSize = 13824000;
 
 	stVencChnAttr.stVencAttr.u32PicWidthSrc = width;
 	stVencChnAttr.stVencAttr.u32PicHeightSrc = height;
 
-	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_H264CBR;
-	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
 	stVencChnAttr.stVencAttr.enLinkMode = AX_LINK_MODE;
 	stVencChnAttr.stVencAttr.bDeBreathEffect = AX_FALSE;
 	stVencChnAttr.stVencAttr.bRefRingbuf = AX_TRUE;
 	stVencChnAttr.stVencAttr.s32StopWaitTime = -1;
+	stVencChnAttr.stVencAttr.u32SliceNum = 0;
+
 	stVencChnAttr.stVencAttr.u8InFifoDepth = 1; //4;
 	stVencChnAttr.stVencAttr.u8OutFifoDepth = 2; //4;
-	stVencChnAttr.stVencAttr.u32SliceNum = 0;
+
+	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
+
+	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
+	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = fps;
+
+	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_H264CBR;
+	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
 
 	stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = gop;
 	if (stVencChnAttr.stRcAttr.stH264Cbr.u32Gop == 0) {
 		stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = 30000;
 	}
 
-	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
-	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = fps;
-
-	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxQp = 0x33;
+	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxQp = 51;
 	stVencChnAttr.stRcAttr.stH264Cbr.u32StatTime = 0;
 	stVencChnAttr.stRcAttr.stH264Cbr.u32MinIQp = 10;
-	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIprop = 0x28;
+	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIprop = 40;
 	stVencChnAttr.stRcAttr.stH264Cbr.u32MinQp = 10;
-	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIQp = 0x33;
+	stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIQp = 51;
 	stVencChnAttr.stRcAttr.stH264Cbr.s32DeBreathQpDelta = 0;
 	stVencChnAttr.stRcAttr.stH264Cbr.u32IdrQpDeltaRange = 0;
 	stVencChnAttr.stRcAttr.stH264Cbr.u32MinIprop = 10;
@@ -349,8 +352,6 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 
 	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
 
-	stVencChnAttr.stVencAttr.enLevel = 0;
-	stVencChnAttr.stVencAttr.enTier = AX_VENC_HEVC_MAIN_TIER;
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.s32Y = 0;
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.u32Width = 0;
 	stVencChnAttr.stVencAttr.stCropCfg.bEnable = AX_FALSE;
@@ -358,30 +359,35 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stVencAttr.stCropCfg.stRect.u32Height = 0;
 	stVencChnAttr.stVencAttr.enRotation = AX_ROTATION_0;
 
-	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
-
 	stVencChnAttr.stVencAttr.enMemSource = AX_MEMORY_SOURCE_CMM;
-	stVencChnAttr.stVencAttr.enProfile = AX_VENC_HEVC_MAIN_PROFILE;
 	stVencChnAttr.stVencAttr.enType = PT_MJPEG;
-	stVencChnAttr.stVencAttr.u32MaxPicWidth = 0xf00;
-	stVencChnAttr.stVencAttr.u32MaxPicHeight = 0x960;
-	stVencChnAttr.stVencAttr.u32BufSize = 0xd2f000;
+	stVencChnAttr.stVencAttr.enLevel = 0;
+	stVencChnAttr.stVencAttr.enProfile = AX_VENC_HEVC_MAIN_PROFILE;
+	stVencChnAttr.stVencAttr.enTier = AX_VENC_HEVC_MAIN_TIER;
+
+	stVencChnAttr.stVencAttr.u32MaxPicWidth = 3840;
+	stVencChnAttr.stVencAttr.u32MaxPicHeight = 2400;
+	stVencChnAttr.stVencAttr.u32BufSize = 13824000;
 
 	stVencChnAttr.stVencAttr.u32PicWidthSrc = width;
 	stVencChnAttr.stVencAttr.u32PicHeightSrc = height;
 
-	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_MJPEGFIXQP;
-	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
-	stVencChnAttr.stVencAttr.bRefRingbuf = AX_TRUE;
-	stVencChnAttr.stVencAttr.s32StopWaitTime = -1;
-	stVencChnAttr.stVencAttr.u8InFifoDepth = 1;
-	stVencChnAttr.stVencAttr.u8OutFifoDepth = 1;
-	stVencChnAttr.stVencAttr.u32SliceNum = 0;
 	stVencChnAttr.stVencAttr.enLinkMode = AX_LINK_MODE;
 	stVencChnAttr.stVencAttr.bDeBreathEffect = AX_FALSE;
+	stVencChnAttr.stVencAttr.bRefRingbuf = AX_TRUE;
+	stVencChnAttr.stVencAttr.s32StopWaitTime = -1;
+	stVencChnAttr.stVencAttr.u32SliceNum = 0;
+
+	stVencChnAttr.stVencAttr.u8InFifoDepth = 1;
+	stVencChnAttr.stVencAttr.u8OutFifoDepth = 1;
+
+	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
 
 	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
 	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = fps;
+
+	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_MJPEGFIXQP;
+	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
 
 	stVencChnAttr.stRcAttr.stMjpegFixQp.s32FixedQp = 51 - (quality * 50) / 100;
 
