@@ -165,7 +165,7 @@ void us_stream_loop(us_stream_s *stream) {
 	us_capture_s *const cap = stream->cap;
 
 	atomic_store(&run->http->last_request_ts, us_get_now_monotonic());
-	printf("type:%d",stream->enc->type);
+	US_LOG_DEBUG("type:%d",stream->enc->type);
 	if (stream->h264_sink != NULL) {
 #ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
