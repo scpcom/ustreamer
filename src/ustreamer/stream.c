@@ -815,9 +815,8 @@ axv:
 
 	if  (res < 0) {
 		us_ax_stream_update_blank(stream);
-		us_ring_producer_release(run->http->jpeg_ring, ri);
-		_stream_expose_jpeg(stream, run->blank->jpeg);
-		return;
+		us_frame_copy(run->blank->jpeg, dest);
+		goto done;
 	}
 
 	cap->run->jpeg_quality = cap->jpeg_quality;
