@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "../../../libs/frame.h"
+#include "../../../libs/logging.h"
 
 #include "ax_global_type.h"
 #include "ax_venc_comm.h"
@@ -34,7 +35,7 @@ static AX_S32 SAMPLE_VENC_Init()
 	};
 	s32Ret = AX_VENC_Init(&stModAttr);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_VENC_Init failed, s32Ret:0x%x\n", s32Ret);
+		AXV_LOGE("AX_VENC_Init failed, s32Ret:0x%x", s32Ret);
 		return s32Ret;
 	}
 	return 0;
@@ -45,7 +46,7 @@ static AX_S32 SAMPLE_VENC_Chn_Init(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_T 
 	VENC_CHN VencChn = 0;
 	AX_S32 ret = AX_VENC_CreateChn(VencChn, pstVencChnAttr);
 	if (AX_SUCCESS != ret) {
-		AXV_LOGE("VencChn %d: AX_VENC_CreateChn failed, s32Ret:0x%x\n", VencChn, ret);
+		AXV_LOGE("VencChn %d: AX_VENC_CreateChn failed, s32Ret:0x%x", VencChn, ret);
 		return -1;
 	}
 	AX_MOD_INFO_T srcMod, dstMod;
@@ -57,7 +58,7 @@ static AX_S32 SAMPLE_VENC_Chn_Init(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_T 
 	dstMod.s32ChnId = VencChn;
 	ret = AX_SYS_Link(&srcMod, &dstMod);
 	if (AX_SUCCESS != ret) {
-		AXV_LOGE("VencChn %d: AX_SYS_Link failed, s32Ret:0x%x\n", VencChn, ret);
+		AXV_LOGE("VencChn %d: AX_SYS_Link failed, s32Ret:0x%x", VencChn, ret);
 		return -1;
 	}
 	*pVencChn = VencChn;
@@ -81,14 +82,14 @@ static AX_S32 SAMPLE_VENC_Chn_DeInit(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_
 	dstMod.s32ChnId = VencChn;
 	s32Ret = AX_SYS_UnLink(&srcMod, &dstMod);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("VencChn %d: AX_SYS_UnLink failed, s32Retry=%d, s32Ret=0x%x\n", VencChn, s32Retry, s32Ret);
+		AXV_LOGE("VencChn %d: AX_SYS_UnLink failed, s32Retry=%d, s32Ret=0x%x", VencChn, s32Retry, s32Ret);
 	}
 
 	s32Retry = 5;
 	do {
 		s32Ret = AX_VENC_DestroyChn(VencChn);
 		if (AX_ERR_VENC_BUSY == s32Ret) {
-			AXV_LOGE("VencChn %d:AX_VENC_DestroyChn return AX_ERR_VENC_BUSY,retry...\n", VencChn);
+			AXV_LOGE("VencChn %d:AX_VENC_DestroyChn return AX_ERR_VENC_BUSY,retry...", VencChn);
 			--s32Retry;
 			usleep(100 * 1000);
 		} else {
@@ -97,7 +98,7 @@ static AX_S32 SAMPLE_VENC_Chn_DeInit(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_
 	} while (s32Retry >= 0);
 
 	if (s32Retry == -1 || AX_SUCCESS != s32Ret) {
-		AXV_LOGE("VencChn %d: AX_VENC_DestroyChn failed, s32Retry=%d, s32Ret=0x%x\n", VencChn, s32Retry, s32Ret);
+		AXV_LOGE("VencChn %d: AX_VENC_DestroyChn failed, s32Retry=%d, s32Ret=0x%x", VencChn, s32Retry, s32Ret);
 	}
 	*pVencChn = -1; // INVALID
 	return 0;
@@ -107,7 +108,7 @@ static AX_S32 SAMPLE_VENC_DeInit()
 {
 	AX_S32 s32Ret = AX_VENC_Deinit();
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_VENC_Deinit failed, s32Ret=0x%x\n", s32Ret);
+		AXV_LOGE("AX_VENC_Deinit failed, s32Ret=0x%x", s32Ret);
 		return s32Ret;
 	}
 	return 0;
@@ -120,7 +121,7 @@ static int SAMPLE_IVPS_Init(AX_S32 nGrpId, AX_IVPS_PIPELINE_ATTR_T *pstPipelineA
 
 	s32Ret = AX_IVPS_Init();
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_Init failed,s32Ret:0x%x\n", s32Ret);
+		AXV_LOGE("AX_IVPS_Init failed,s32Ret:0x%x", s32Ret);
 		return s32Ret;
 	}
 
@@ -128,30 +129,30 @@ static int SAMPLE_IVPS_Init(AX_S32 nGrpId, AX_IVPS_PIPELINE_ATTR_T *pstPipelineA
 	stGrpAttr.ePipeline    = AX_IVPS_PIPELINE_DEFAULT;
 	s32Ret                 = AX_IVPS_CreateGrp(nGrpId, &stGrpAttr);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_CreateGrp failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("AX_IVPS_CreateGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 	s32Ret = AX_IVPS_SetPipelineAttr(nGrpId, pstPipelineAttr);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_SetPipelineAttr failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("AX_IVPS_SetPipelineAttr failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 	for (nChn = 0; nChn < pstPipelineAttr->nOutChnNum; nChn++) {
 		s32Ret = AX_IVPS_EnableChn(nGrpId, nChn);
 		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\n", nGrpId, nChn, s32Ret);
+			AXV_LOGE("AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x", nGrpId, nChn, s32Ret);
 			return s32Ret;
 		}
 	}
 	s32Ret = AX_IVPS_StartGrp(nGrpId);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_StartGrp failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("AX_IVPS_StartGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 #ifdef SAMPLE_IVPS_CROPRESIZE_ENABLE
 	s32Ret = IVPS_CropResizeThreadStart(nGrpId, nChnGetId);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("IVPS_CropResizeThreadStart failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("IVPS_CropResizeThreadStart failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 #endif
@@ -186,27 +187,27 @@ static AX_S32 SAMPLE_IVPS_DeInit(AX_S32 nGrpId)
 
 	s32Ret = AX_IVPS_StopGrp(nGrpId);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 
 	for (nChn = 0; nChn < 3; nChn++) {
 		s32Ret = AX_IVPS_DisableChn(nGrpId, nChn);
 		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\n", nGrpId, nChn, s32Ret);
+			AXV_LOGE("AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x", nGrpId, nChn, s32Ret);
 			return s32Ret;
 		}
 	}
 
 	s32Ret = AX_IVPS_DestoryGrp(nGrpId);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_DestoryGrp failed,nGrp %d,s32Ret:0x%x\n", nGrpId, s32Ret);
+		AXV_LOGE("AX_IVPS_DestoryGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
 		return s32Ret;
 	}
 
 	s32Ret = AX_IVPS_Deinit();
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_Deinit failed,s32Ret:0x%x\n", s32Ret);
+		AXV_LOGE("AX_IVPS_Deinit failed,s32Ret:0x%x", s32Ret);
 		return s32Ret;
 	}
 
@@ -224,14 +225,14 @@ static AX_S32 SAMPLE_VIN_StartDev(AX_U8 devId, AX_BOOL bEnableDev, AX_VIN_DEV_AT
 			tDumpAttr.nDepth = 3;
 			nRet = AX_VIN_SetDevDumpAttr(devId, AX_VIN_DUMP_QUEUE_TYPE_DEV, &tDumpAttr);
 			if (0 != nRet) {
-				printf(" AX_VIN_SetDevDumpAttr failed, ret=0x%x.\n", nRet);
+				AXV_LOGE("AX_VIN_SetDevDumpAttr failed, ret=0x%x.", nRet);
 				return -1;
 			}
 		}
 
 		nRet = AX_VIN_EnableDev(devId);
 		if (0 != nRet) {
-			printf("AX_VIN_EnableDev failed, ret=0x%x.\n", nRet);
+			AXV_LOGE("AX_VIN_EnableDev failed, ret=0x%x.", nRet);
 			return -1;
 		}
 	}
@@ -250,14 +251,14 @@ static AX_S32 SAMPLE_VIN_StopDev(AX_U8 devId, AX_BOOL bEnableDev)
 	if (bEnableDev) {
 		axRet = AX_VIN_DisableDev(devId);
 		if (0 != axRet) {
-			printf("AX_VIN_DisableDev failed, devId=%d, ret=0x%x.\n", devId, axRet);
+			AXV_LOGE("AX_VIN_DisableDev failed, devId=%d, ret=0x%x.", devId, axRet);
 		}
 
 		if (AX_VIN_DEV_OFFLINE == tDevAttr.eDevMode) {
 			tDumpAttr.bEnable = AX_FALSE;
 			axRet = AX_VIN_SetDevDumpAttr(devId, AX_VIN_DUMP_QUEUE_TYPE_DEV, &tDumpAttr);
 			if (0 != axRet) {
-				printf(" AX_VIN_SetSnsDumpAttr failed, ret=0x%x.\n", axRet);
+				AXV_LOGE("AX_VIN_SetDevDumpAttr failed, ret=0x%x.", axRet);
 			}
 		}
 
@@ -273,9 +274,9 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	uint32_t width, height, fps, bitrate, quality, gop;
 	if (ax_enc == NULL) return -1;
 	/* Check whether the encoder is already open or in an error state */
-	AXV_LOGI("Open encoder %s...\n", ax_enc->dev_name_);
+	AXV_LOGI("Open encoder %s...", ax_enc->dev_name_);
 	if (ax_enc->state_ & AX_ENCODER_HW_OPEN) {
-		AXV_LOGE("Error: encoder was open or meet error, now state is: %d\n", ax_enc->state_);
+		AXV_LOGE("Error: encoder was open or meet error, now state is: %d", ax_enc->state_);
 		goto ErrorHandle;
 	}
 
@@ -421,7 +422,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	return 0;
 
 ErrorHandle:
-	AXV_LOGE("Encoder open meet error, now handle it\n");
+	AXV_LOGE("Encoder open meet error, now handle it");
 	return -1;
 }
 
@@ -434,7 +435,7 @@ us_ax_encoder_s *us_ax_encoder_init(const char *pdev_name, int width, int height
 
 	int CopyLen = strlen(pdev_name);
 	if (CopyLen > CONFIG_DEVNAME_LEN - 1) {
-		AXV_LOGE("Error: device name length over limit: %d\n", CopyLen);
+		AXV_LOGE("Error: device name length over limit: %d", CopyLen);
 		goto ErrorHandle;
 	}
 	memset(ax_enc->dev_name_, 0, CONFIG_DEVNAME_LEN);
@@ -452,11 +453,11 @@ us_ax_encoder_s *us_ax_encoder_init(const char *pdev_name, int width, int height
 		goto ErrorHandle;
 	}
 	ax_enc->is_alloc_ = 1;
-	AXV_LOGI("Encoder %s open success\n", ax_enc->dev_name_);
+	AXV_LOGI("Encoder %s open success", ax_enc->dev_name_);
 	return ax_enc;
 
 ErrorHandle:
-	AXV_LOGE("Encoder open meet error, now handle it\n");
+	AXV_LOGE("Encoder open meet error, now handle it");
 	free(ax_enc);
 	return NULL;
 }
@@ -494,7 +495,7 @@ int us_ax_encoder_destroy(us_ax_encoder_s *ax_enc)
 	AX_SYS_Deinit();
 	if (ax_enc->is_alloc_) free(ax_enc);
 
-	AXV_LOGI("Encoder closed\n");
+	AXV_LOGI("Encoder closed");
 
 	return 0;
 }
@@ -506,7 +507,7 @@ int us_ax_enable_stream(VENC_CHN VencChn)
 	stRecvParam.s32RecvPicNum = -1;
 	s32Ret = AX_VENC_StartRecvFrame(VencChn, &stRecvParam);
 	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGI("VencChn %d: AX_VENC_StartRecvFrame failed, s32Ret:0x%x\n", VencChn, s32Ret);
+		AXV_LOGI("VencChn %d: AX_VENC_StartRecvFrame failed, s32Ret:0x%x", VencChn, s32Ret);
 		return -1;
 	}
 	return 0;
@@ -516,7 +517,7 @@ int us_ax_disable_stream(VENC_CHN VencChn)
 {
 	AX_S32 s32Ret = AX_VENC_StopRecvFrame(VencChn);
 	if (0 != s32Ret) {
-		AXV_LOGE("VencChn %d: AX_VENC_StopRecvFrame failed, s32Ret:0x%x\n", VencChn, s32Ret);
+		AXV_LOGE("VencChn %d: AX_VENC_StopRecvFrame failed, s32Ret:0x%x", VencChn, s32Ret);
 		return -1;
 	}
 	return 0;
@@ -534,11 +535,11 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 	if (AX_SUCCESS == s32Ret) {
 		AX_BOOL bIFrame = (AX_VENC_INTRA_FRAME == stStream.stPack.enCodingType) ? AX_TRUE : AX_FALSE;
 		us_frame_set_data(frame, stStream.stPack.pu8Addr, stStream.stPack.u32Len);
-		// AXV_LOGI("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d\n", VencChn, stStream.stPack.u64PTS,
+		// AXV_LOGI("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d", VencChn, stStream.stPack.u64PTS,
 		// 	stStream.stPack.pu8Addr, stStream.stPack.u32Len, stStream.stPack.enCodingType);
 		s32Ret = AX_VENC_ReleaseStream(VencChn, &stStream);
 		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("VencChn %d: AX_VENC_ReleaseStream failed! s32Ret:0x%x\n", VencChn, s32Ret);
+			AXV_LOGE("VencChn %d: AX_VENC_ReleaseStream failed! s32Ret:0x%x", VencChn, s32Ret);
 			usleep(10000);
 			return -1;
 		}
@@ -547,14 +548,14 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 		}
 		return 0;
 	} else if (AX_ERR_VENC_FLOW_END == s32Ret) {
-		AXV_LOGE("VencChn %d: AX_VENC_GetStream end flow, exit!\n", VencChn);
+		AXV_LOGE("VencChn %d: AX_VENC_GetStream end flow, exit!", VencChn);
 		usleep(10000);
 		return -1;
 	} else if (AX_ERR_VENC_QUEUE_EMPTY == s32Ret) {
-		//AXV_LOGI("VencChn %d: AX_VENC_GetStream queue empty\n", VencChn);
+		//AXV_LOGI("VencChn %d: AX_VENC_GetStream queue empty", VencChn);
 		return -1;
 	} else {
-		printf("VencChn %d: AX_VENC_GetStream failed, s32Ret:0x%x\n", VencChn, s32Ret);
+		AXV_LOGW("VencChn %d: AX_VENC_GetStream failed, s32Ret:0x%x", VencChn, s32Ret);
 	}
 	return -1;
 }
