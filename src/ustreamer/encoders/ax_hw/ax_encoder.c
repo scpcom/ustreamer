@@ -44,6 +44,7 @@ static AX_S32 SAMPLE_VENC_Init()
 static AX_S32 SAMPLE_VENC_Chn_Init(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_T *pstVencChnAttr)
 {
 	VENC_CHN VencChn = 0;
+	if (pVencChn) VencChn = *pVencChn;
 	AX_S32 ret = AX_VENC_CreateChn(VencChn, pstVencChnAttr);
 	if (AX_SUCCESS != ret) {
 		AXV_LOGE("VencChn %d: AX_VENC_CreateChn failed, s32Ret:0x%x", VencChn, ret);
@@ -61,13 +62,14 @@ static AX_S32 SAMPLE_VENC_Chn_Init(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_T 
 		AXV_LOGE("VencChn %d: AX_SYS_Link failed, s32Ret:0x%x", VencChn, ret);
 		return -1;
 	}
-	*pVencChn = VencChn;
+	if (pVencChn) *pVencChn = VencChn;
 	return 0;
 }
 
 static AX_S32 SAMPLE_VENC_Chn_DeInit(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_T *pstVencChnAttr)
 {
-	VENC_CHN VencChn = *pVencChn;
+	VENC_CHN VencChn = 0;
+	if (pVencChn) VencChn = *pVencChn;
 	AX_S32 s32Ret = 0, s32Retry = 5;
 
 	if (pstVencChnAttr->stVencAttr.enType == PT_PCMU) {
@@ -100,7 +102,7 @@ static AX_S32 SAMPLE_VENC_Chn_DeInit(VENC_CHN *pVencChn, const AX_VENC_CHN_ATTR_
 	if (s32Retry == -1 || AX_SUCCESS != s32Ret) {
 		AXV_LOGE("VencChn %d: AX_VENC_DestroyChn failed, s32Retry=%d, s32Ret=0x%x", VencChn, s32Retry, s32Ret);
 	}
-	*pVencChn = -1; // INVALID
+	if (pVencChn) *pVencChn = -1; // INVALID
 	return 0;
 }
 
@@ -349,7 +351,8 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stRcAttr.stH264Cbr.u32BitRate = bitrate;
 
 	ax_enc->stH264VencChnAttr = stVencChnAttr;
-	ax_enc->venc_h264_run_     = 1;
+	ax_enc->venc_h264_chn     = -1;
+	ax_enc->venc_h264_run_    = 1;
 
 	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
 
@@ -393,6 +396,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stRcAttr.stMjpegFixQp.s32FixedQp = 51 - (quality * 50) / 100;
 
 	ax_enc->stJPEGVencChnAttr = stVencChnAttr;
+	ax_enc->venc_jpeg_chn     = -1;
 	ax_enc->venc_jpeg_run_    = 0;
 
 	AX_SYS_Init();
@@ -403,6 +407,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 		SAMPLE_VENC_Init();
 	}
 	if (ax_enc->venc_h264_run_) {
+		ax_enc->venc_h264_chn = 0;
 		ret = SAMPLE_VENC_Chn_Init(&ax_enc->venc_h264_chn, &ax_enc->stH264VencChnAttr);
 		if (0 != ret)
 			ax_enc->venc_h264_run_ = 0;
@@ -411,6 +416,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 #endif
 	}
 	if (ax_enc->venc_jpeg_run_) {
+		ax_enc->venc_jpeg_chn = ax_enc->venc_h264_chn + 1;
 		ret = SAMPLE_VENC_Chn_Init(&ax_enc->venc_jpeg_chn, &ax_enc->stJPEGVencChnAttr);
 		if (0 != ret)
 			ax_enc->venc_jpeg_run_ = 0;
