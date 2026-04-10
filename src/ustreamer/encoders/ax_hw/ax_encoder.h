@@ -16,10 +16,11 @@ extern "C" {
 
 typedef struct us_ax_encoder_s {
 	char dev_name_[CONFIG_DEVNAME_LEN];
-	int desired_fps;
 	int is_alloc_;
 	uint32_t width;
 	uint32_t height;
+	uint32_t fps;
+	uint32_t desired_fps;
 	uint32_t quality;
 	uint32_t bitrate;
 	uint32_t gop;

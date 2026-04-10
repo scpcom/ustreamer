@@ -170,8 +170,12 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
 #else
-		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps > 0 ? cap->desired_fps : 60, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
+		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
 		if (ax_enc) {
+			cap->run->width = ax_enc->width;
+			cap->run->height = ax_enc->height;
+			cap->run->hw_fps = ax_enc->desired_fps;
+			cap->run->jpeg_quality = ax_enc->quality;
 			run->h264_enc = (us_m2m_encoder_s *)ax_enc;
 			if (ax_enc->venc_h264_run_) {
 				us_ax_enable_stream(ax_enc->venc_h264_chn);
@@ -819,7 +823,6 @@ axv:
 		goto done;
 	}
 
-	cap->run->jpeg_quality = cap->jpeg_quality;
 	dest->format = V4L2_PIX_FMT_MJPEG;
 	dest->width = cap->run->width;
 	dest->height = cap->run->height;

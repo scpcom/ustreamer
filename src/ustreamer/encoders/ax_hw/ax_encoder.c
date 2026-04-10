@@ -269,11 +269,80 @@ static AX_S32 SAMPLE_VIN_StopDev(AX_U8 devId, AX_BOOL bEnableDev)
 	return 0;
 }
 
+static void us_ax_get_lt_info(us_ax_encoder_s *ax_enc)
+{
+	int res;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t fps = 0;
+	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	if (pFile != NULL) {
+		fclose(pFile);
+		pFile = fopen("/proc/lt6911_info/width","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&width);
+			if (res != 1) {
+				width = 0;
+				AXV_LOGE("Failed to read width, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open width file, use default");
+		}
+		pFile = fopen("/proc/lt6911_info/height","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&height);
+			if (res != 1) {
+				height = 0;
+				AXV_LOGE("Failed to read height, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open height file, use default");
+		}
+	}
+	else {
+		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+	}
+	if (width != 0 && height != 0) {
+		ax_enc->width = width;
+		ax_enc->height = height;
+	}
+	else {
+		ax_enc->width = 1920;
+		ax_enc->height = 1080;
+		AXV_LOGE("Width or height is 0, use default values");
+	}
+	pFile = fopen("/proc/lt6911_info/fps","r");
+	if (pFile == NULL) {
+		fps = 60;
+		AXV_LOGE("Failed to open fps file, set fps to 60");
+	}
+	else {
+		res = fscanf(pFile,"%d",&fps);
+		if (res != 1) {
+			fps = 0;
+			AXV_LOGE("Failed to read fps, use default");
+		}
+		fclose(pFile);
+		if (fps == 0) {
+			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
+			fps = 30;
+		}
+	}
+	ax_enc->fps = fps;
+	if (!ax_enc->desired_fps)
+		ax_enc->desired_fps = fps;
+	AXV_LOGI("Using %dx%d %d fps", ax_enc->width, ax_enc->height, ax_enc->desired_fps);
+}
+
 int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 {
 	AX_S32 ret;
 	AX_VENC_CHN_ATTR_T stVencChnAttr;
-	uint32_t width, height, fps, bitrate, quality, gop;
+	uint32_t width, height, fps, desired_fps, bitrate, quality, gop;
 	if (ax_enc == NULL) return -1;
 	/* Check whether the encoder is already open or in an error state */
 	AXV_LOGI("Open encoder %s...", ax_enc->dev_name_);
@@ -282,9 +351,12 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 		goto ErrorHandle;
 	}
 
+	us_ax_get_lt_info(ax_enc);
+
 	width = ax_enc->width;
 	height = ax_enc->height;
-	fps = ax_enc->desired_fps;
+	fps = ax_enc->fps;
+	desired_fps = ax_enc->desired_fps;
 	quality = ax_enc->quality;
 	bitrate = ax_enc->bitrate;
 	gop = ax_enc->gop;
@@ -323,7 +395,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
 
 	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
-	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = fps;
+	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = desired_fps;
 
 	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_H264CBR;
 	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
@@ -388,7 +460,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
 
 	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
-	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = fps;
+	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = desired_fps;
 
 	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_MJPEGFIXQP;
 	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
@@ -449,6 +521,7 @@ us_ax_encoder_s *us_ax_encoder_init(const char *pdev_name, int width, int height
 
 	ax_enc->width          = width;
 	ax_enc->height         = height;
+	ax_enc->fps            = fps;
 	ax_enc->desired_fps    = fps;
 	ax_enc->quality        = quality;
 	ax_enc->bitrate        = bitrate;
