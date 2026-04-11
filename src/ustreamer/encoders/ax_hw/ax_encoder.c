@@ -614,8 +614,8 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 	if (AX_SUCCESS == s32Ret) {
 		AX_BOOL bIFrame = (AX_VENC_INTRA_FRAME == stStream.stPack.enCodingType) ? AX_TRUE : AX_FALSE;
 		us_frame_set_data(frame, stStream.stPack.pu8Addr, stStream.stPack.u32Len);
-		// AXV_LOGI("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d", VencChn, stStream.stPack.u64PTS,
-		// 	stStream.stPack.pu8Addr, stStream.stPack.u32Len, stStream.stPack.enCodingType);
+		AXV_LOGD("VencChn %d: u64PTS:%lld pu8Addr:%p u32Len:%d enCodingType:%d", VencChn, stStream.stPack.u64PTS,
+			stStream.stPack.pu8Addr, stStream.stPack.u32Len, stStream.stPack.enCodingType);
 		s32Ret = AX_VENC_ReleaseStream(VencChn, &stStream);
 		if (AX_SUCCESS != s32Ret) {
 			AXV_LOGE("VencChn %d: AX_VENC_ReleaseStream failed! s32Ret:0x%x", VencChn, s32Ret);
@@ -631,7 +631,7 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 		usleep(10000);
 		return -1;
 	} else if (AX_ERR_VENC_QUEUE_EMPTY == s32Ret) {
-		//AXV_LOGI("VencChn %d: AX_VENC_GetStream queue empty", VencChn);
+		AXV_LOGD("VencChn %d: AX_VENC_GetStream queue empty", VencChn);
 		return -1;
 	} else {
 		AXV_LOGW("VencChn %d: AX_VENC_GetStream failed, s32Ret:0x%x", VencChn, s32Ret);
