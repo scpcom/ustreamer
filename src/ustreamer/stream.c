@@ -176,7 +176,7 @@ void us_stream_loop(us_stream_s *stream) {
 			cap->run->height = ax_enc->height;
 			cap->run->hw_fps = ax_enc->desired_fps;
 			cap->run->jpeg_quality = ax_enc->quality;
-			run->h264_enc = (us_m2m_encoder_s *)ax_enc;
+			run->ax_enc = ax_enc;
 			if (ax_enc->venc_h264_run_) {
 				us_ax_enable_stream(ax_enc->venc_h264_chn);
 			}
@@ -317,7 +317,7 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 	US_DELETE(run->h264_enc, us_m2m_encoder_destroy);
 #else
-	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
+	us_ax_encoder_s *ax_enc = run->ax_enc;
 	if (ax_enc) {
 		if (ax_enc->venc_jpeg_run_) {
 			us_ax_disable_stream(ax_enc->venc_jpeg_chn);
@@ -814,7 +814,7 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 	goto done;
 axv:
 	int res = -1;
-	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
+	us_ax_encoder_s *ax_enc = run->ax_enc;
 	res = us_ax_get_mjpeg_frame(ax_enc, dest);
 
 	if  (res < 0) {
@@ -889,7 +889,7 @@ static void _stream_encode_expose_h264(us_stream_s *stream, const us_frame_s *fr
 	goto done;
 axv:
 	int res = -1;
-	us_ax_encoder_s *ax_enc = (us_ax_encoder_s *)run->h264_enc;
+	us_ax_encoder_s *ax_enc = run->ax_enc;
 	uz src_used = run->h264_tmp_src->used;
 
 	if (src_used < 1) run->h264_tmp_src->used = 1;

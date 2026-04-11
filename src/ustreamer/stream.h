@@ -46,6 +46,9 @@
 #ifdef WITH_LIBX264
 #	include "encoders/libx264/libx264.h"
 #endif
+#ifdef MK_WITH_AX
+#	include "encoders/ax_hw/ax_encoder.h"
+#endif
 
 typedef struct {
 #	ifdef WITH_V4P
@@ -69,6 +72,9 @@ typedef struct {
 	us_m2m_encoder_s	*h264_enc;
 #ifdef WITH_LIBX264
 	us_libx264_encoder_s libx264_enc;
+#endif
+#ifdef MK_WITH_AX
+	us_ax_encoder_s		*ax_enc;
 #endif
 	us_frame_s			*h264_tmp_src;
 	us_frame_s			*h264_dest;
