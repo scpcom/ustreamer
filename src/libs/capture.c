@@ -278,6 +278,12 @@ int us_capture_open(us_capture_s *cap) {
 		_LOG_PERROR("Can't start capturing");
 		goto error;
 	}
+#else
+	us_ax_capture_s *ax_cap = us_ax_capture_init(run->width, run->height, run->hw_fps);
+	if (!ax_cap) {
+		return -1;
+	}
+	run ->ax_cap = ax_cap;
 #endif
 	run->streamon = true;
 
@@ -360,6 +366,11 @@ void us_capture_close(us_capture_s *cap) {
 
 #ifndef MK_WITH_AX
 	US_CLOSE_FD(run->fd);
+#else
+	if (run->ax_cap) {
+		us_ax_capture_destroy(run->ax_cap);
+		run->ax_cap = NULL;
+	}
 #endif
 
 	if (say) {

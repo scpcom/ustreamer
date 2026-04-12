@@ -99,10 +99,12 @@ endif
 
 ifneq ($(MK_WITH_AX),)
 override _CFLAGS += -DMK_WITH_AX -DWITH_AX -I/opt/include
-override _USTR_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
-override _DUMP_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
-override _V4P_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc
+override _USTR_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc -lax_mipi
+override _DUMP_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc -lax_mipi
+override _V4P_LDFLAGS += -Wl,-rpath=/opt/lib -L/opt/lib -lax_sys -lax_ivps -lax_engine -lax_proton -lax_venc -lax_mipi
 override _USTR_SRCS += $(shell ls ustreamer/encoders/ax_hw/*.c)
+override _DUMP_SRCS += $(shell ls ustreamer/encoders/ax_hw/ax_cap*.c)
+override _V4P_SRCS += $(shell ls ustreamer/encoders/ax_hw/ax_cap*.c)
 endif
 
 ifneq ($(MK_WITH_V4P),)

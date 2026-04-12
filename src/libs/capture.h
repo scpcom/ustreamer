@@ -28,6 +28,9 @@
 
 #include "types.h"
 #include "frame.h"
+#ifdef MK_WITH_AX
+#	include "../ustreamer/encoders/ax_hw/ax_capture.h"
+#endif
 
 
 #define US_VIDEO_MIN_WIDTH		((uint)160)
@@ -69,6 +72,7 @@ typedef struct {
 	bool				streamon;
 	int					open_error_once;
 #ifdef MK_WITH_AX
+	us_ax_capture_s			*ax_cap;
 	uint				cur_index;
 #endif
 } us_capture_runtime_s;
