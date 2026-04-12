@@ -116,159 +116,6 @@ static AX_S32 AX_ENC_VENC_DeInit()
 	return 0;
 }
 
-static int SAMPLE_IVPS_Init(AX_S32 nGrpId, AX_IVPS_PIPELINE_ATTR_T *pstPipelineAttr)
-{
-	AX_S32 s32Ret                          = 0, nChn;
-	AX_IVPS_GRP_ATTR_T stGrpAttr           = {0};
-
-	s32Ret = AX_IVPS_Init();
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_Init failed,s32Ret:0x%x", s32Ret);
-		return s32Ret;
-	}
-
-	stGrpAttr.nInFifoDepth = 2;
-	stGrpAttr.ePipeline    = AX_IVPS_PIPELINE_DEFAULT;
-	s32Ret                 = AX_IVPS_CreateGrp(nGrpId, &stGrpAttr);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_CreateGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-	s32Ret = AX_IVPS_SetPipelineAttr(nGrpId, pstPipelineAttr);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_SetPipelineAttr failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-	for (nChn = 0; nChn < pstPipelineAttr->nOutChnNum; nChn++) {
-		s32Ret = AX_IVPS_EnableChn(nGrpId, nChn);
-		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x", nGrpId, nChn, s32Ret);
-			return s32Ret;
-		}
-	}
-	s32Ret = AX_IVPS_StartGrp(nGrpId);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_StartGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-#ifdef SAMPLE_IVPS_CROPRESIZE_ENABLE
-	s32Ret = IVPS_CropResizeThreadStart(nGrpId, nChnGetId);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("IVPS_CropResizeThreadStart failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-#endif
-	AX_MOD_INFO_T srcMod, dstMod;
-	srcMod.enModId  = AX_ID_VIN;
-	srcMod.s32GrpId = 0;
-	srcMod.s32ChnId = 0;
-
-	dstMod.enModId  = AX_ID_IVPS;
-	dstMod.s32GrpId = nGrpId;
-	dstMod.s32ChnId = 0;
-	AX_SYS_Link(&srcMod, &dstMod);
-	return 0;
-}
-
-static AX_S32 SAMPLE_IVPS_DeInit(AX_S32 nGrpId)
-{
-	AX_S32 s32Ret = 0, nChn = 0;
-
-	AX_MOD_INFO_T srcMod, dstMod;
-	srcMod.enModId  = AX_ID_VIN;
-	srcMod.s32GrpId = 0;
-	srcMod.s32ChnId = 0;
-	dstMod.enModId  = AX_ID_IVPS;
-	dstMod.s32GrpId = nGrpId;
-	dstMod.s32ChnId = 0;
-	AX_SYS_UnLink(&srcMod, &dstMod);
-
-#ifdef SAMPLE_IVPS_CROPRESIZE_ENABLE
-	IVPS_CropResizeThreadStop();
-#endif
-
-	s32Ret = AX_IVPS_StopGrp(nGrpId);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-
-	for (nChn = 0; nChn < 3; nChn++) {
-		s32Ret = AX_IVPS_DisableChn(nGrpId, nChn);
-		if (AX_SUCCESS != s32Ret) {
-			AXV_LOGE("AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x", nGrpId, nChn, s32Ret);
-			return s32Ret;
-		}
-	}
-
-	s32Ret = AX_IVPS_DestoryGrp(nGrpId);
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_DestoryGrp failed,nGrp %d,s32Ret:0x%x", nGrpId, s32Ret);
-		return s32Ret;
-	}
-
-	s32Ret = AX_IVPS_Deinit();
-	if (AX_SUCCESS != s32Ret) {
-		AXV_LOGE("AX_IVPS_Deinit failed,s32Ret:0x%x", s32Ret);
-		return s32Ret;
-	}
-
-	return 0;
-}
-
-static AX_S32 SAMPLE_VIN_StartDev(AX_U8 devId, AX_BOOL bEnableDev, AX_VIN_DEV_ATTR_T *pDevAttr)
-{
-	AX_S32 nRet = 0;
-	AX_VIN_DUMP_ATTR_T  tDumpAttr = {0};
-
-	if (bEnableDev) {
-		if (AX_VIN_DEV_OFFLINE == pDevAttr->eDevMode) {
-			tDumpAttr.bEnable = AX_TRUE;
-			tDumpAttr.nDepth = 3;
-			nRet = AX_VIN_SetDevDumpAttr(devId, AX_VIN_DUMP_QUEUE_TYPE_DEV, &tDumpAttr);
-			if (0 != nRet) {
-				AXV_LOGE("AX_VIN_SetDevDumpAttr failed, ret=0x%x.", nRet);
-				return -1;
-			}
-		}
-
-		nRet = AX_VIN_EnableDev(devId);
-		if (0 != nRet) {
-			AXV_LOGE("AX_VIN_EnableDev failed, ret=0x%x.", nRet);
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
-static AX_S32 SAMPLE_VIN_StopDev(AX_U8 devId, AX_BOOL bEnableDev)
-{
-	AX_S32 axRet;
-	AX_VIN_DEV_ATTR_T tDevAttr = {0};
-	AX_VIN_DUMP_ATTR_T tDumpAttr = {0};
-
-	AX_VIN_GetDevAttr(devId, &tDevAttr);
-
-	if (bEnableDev) {
-		axRet = AX_VIN_DisableDev(devId);
-		if (0 != axRet) {
-			AXV_LOGE("AX_VIN_DisableDev failed, devId=%d, ret=0x%x.", devId, axRet);
-		}
-
-		if (AX_VIN_DEV_OFFLINE == tDevAttr.eDevMode) {
-			tDumpAttr.bEnable = AX_FALSE;
-			axRet = AX_VIN_SetDevDumpAttr(devId, AX_VIN_DUMP_QUEUE_TYPE_DEV, &tDumpAttr);
-			if (0 != axRet) {
-				AXV_LOGE("AX_VIN_SetDevDumpAttr failed, ret=0x%x.", axRet);
-			}
-		}
-
-	}
-
-	return 0;
-}
-
 static void us_ax_get_lt_info(us_ax_encoder_s *ax_enc)
 {
 	int res;
@@ -472,9 +319,6 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	ax_enc->venc_jpeg_run_    = 0;
 
 	AX_SYS_Init();
-#if 0
-	SAMPLE_IVPS_Init(0, ax_enc);
-#endif
 	if (ax_enc->venc_h264_run_ || ax_enc->venc_jpeg_run_) {
 		AX_ENC_VENC_Init();
 	}
@@ -553,9 +397,6 @@ int us_ax_encoder_destroy(us_ax_encoder_s *ax_enc)
 		ax_enc->state_ &= ~((int)AX_ENCODER_HW_ENABLE);
 	}
 	ax_enc->state_ = AX_ENCODER_NONT;
-#if 0
-	SAMPLE_IVPS_DeInit(0);
-#endif
 #if 0
 	pthread_join(ax_enc->venc_thread_id_, NULL);
 #endif
