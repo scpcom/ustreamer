@@ -815,6 +815,7 @@ static void _stream_expose_jpeg(us_stream_s *stream, const us_frame_s *frame) {
 axv:
 	int res = -1;
 	us_ax_encoder_s *ax_enc = run->ax_enc;
+	us_ax_encoder_check(ax_enc, cap->run->width, cap->run->height, cap->run->hw_fps);
 	res = us_ax_get_mjpeg_frame(ax_enc, dest);
 
 	if  (res < 0) {
@@ -893,6 +894,7 @@ axv:
 	if (src_used < 1) run->h264_tmp_src->used = 1;
 	us_frame_encoding_begin(run->h264_tmp_src, run->h264_dest, V4L2_PIX_FMT_H264);
 	run->h264_tmp_src->used = src_used;
+	us_ax_encoder_check(ax_enc, cap->run->width, cap->run->height, cap->run->hw_fps);
 	res = us_ax_get_h264_frame(ax_enc, run->h264_dest, false);
 
 	if  (res < 0) {

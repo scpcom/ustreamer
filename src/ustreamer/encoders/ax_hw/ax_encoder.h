@@ -48,6 +48,8 @@ int us_ax_encoder_destroy(us_ax_encoder_s *ax_enc);
 int us_ax_enable_stream(VENC_CHN VencChn);
 int us_ax_disable_stream(VENC_CHN VencChn);
 
+int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps);
+
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);
 int us_ax_get_mjpeg_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame);
 

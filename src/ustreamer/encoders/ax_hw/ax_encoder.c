@@ -372,6 +372,91 @@ int us_ax_disable_stream(VENC_CHN VencChn)
 	return 0;
 }
 
+int us_ax_set_resolution(VENC_CHN chn, AX_U32 width, AX_U32 height)
+{
+  AX_S32 s32Ret;
+  int iRet;
+  AX_VENC_CHN_ATTR_T stVencChnAttr;
+
+  s32Ret = AX_VENC_StopRecvFrame(chn);
+  if (s32Ret != 0) {
+    AXV_LOGE("[%d] AX_VENC_StopRecvFrame failed, ret=0x%x", chn, s32Ret);
+  }
+  s32Ret = AX_VENC_ResetChn(chn);
+  if (s32Ret == 0) {
+    memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
+    s32Ret = AX_VENC_GetChnAttr(chn,&stVencChnAttr);
+    if (s32Ret == 0) {
+      stVencChnAttr.stVencAttr.u32PicWidthSrc = width;
+      stVencChnAttr.stVencAttr.u32PicHeightSrc = height;
+      s32Ret = AX_VENC_SetChnAttr(chn,&stVencChnAttr);
+      iRet = 0;
+      if (s32Ret == 0) goto done;
+      AXV_LOGE("[%d] AX_VENC_SetChnAttr failed, ret=0x%x", chn, s32Ret);
+    }
+    else {
+      AXV_LOGE("[%d] AX_VENC_GetChnAttr failed, ret=0x%x", chn, s32Ret);
+    }
+  }
+  else {
+    AXV_LOGE("[%d] AX_VENC_ResetChn failed, ret=0x%x", chn, s32Ret);
+  }
+  iRet = -1;
+done:
+  return iRet;
+}
+
+int us_ax_set_fps(VENC_CHN chn, uint32_t fps)
+{
+  AX_S32 s32Ret;
+  int iRet;
+  AX_VENC_RC_PARAM_T stRcParam;
+
+  memset(&stRcParam, 0, sizeof(stRcParam));
+  s32Ret = AX_VENC_GetRcParam(chn,&stRcParam);
+  if (s32Ret == 0) {
+    stRcParam.stFrameRate.fSrcFrameRate = fps;
+    stRcParam.stFrameRate.fDstFrameRate = fps;
+    s32Ret = AX_VENC_SetRcParam(chn,&stRcParam);
+    iRet = 0;
+    if (s32Ret == 0) goto done;
+    AXV_LOGE("AX_VENC_SetRcParam failed, ret=0x%x", s32Ret);
+  }
+  else {
+    AXV_LOGE("AX_VENC_GetRcParam failed, ret=0x%x", s32Ret);
+  }
+  iRet = -1;
+done:
+  return iRet;
+}
+
+int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps)
+{
+	if (ax_enc->width == width &&
+	    ax_enc->height == height &&
+	    ax_enc->fps == fps) {
+		return 0;
+	}
+
+	ax_enc->width      = width;
+	ax_enc->height     = height;
+	ax_enc->fps        = fps;
+
+	AXV_LOGI("Using %dx%d %d fps", ax_enc->width, ax_enc->height, ax_enc->fps);
+
+	if (ax_enc->venc_jpeg_run_) {
+		us_ax_set_resolution(ax_enc->venc_jpeg_chn, ax_enc->width, ax_enc->height);
+		us_ax_set_fps(ax_enc->venc_jpeg_chn, ax_enc->fps);
+		us_ax_enable_stream(ax_enc->venc_jpeg_chn);
+	}
+	if (ax_enc->venc_h264_run_) {
+		us_ax_set_resolution(ax_enc->venc_h264_chn, ax_enc->width, ax_enc->height);
+		us_ax_set_fps(ax_enc->venc_h264_chn, ax_enc->fps);
+		us_ax_enable_stream(ax_enc->venc_h264_chn);
+	}
+	return 0;
+}
+
 void us_ax_request_key_frame(VENC_CHN VencChn)
 {
 	AX_VENC_RequestIDR(VencChn, AX_FALSE);
