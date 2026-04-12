@@ -302,9 +302,17 @@ int us_capture_open(us_capture_s *cap) {
 	if (!run->ax_cap) {
 		return -1;
 	}
-	run->width = run->ax_cap->dst_width;
-	run->height = run->ax_cap->dst_height;
-	run->hw_fps = run->ax_cap->src_fps;
+	if (us_ax_capture_open(run->ax_cap) < 0) {
+		goto error_no_signal;
+	}
+	if (run->width != run->ax_cap->dst_width ||
+	    run->height != run->ax_cap->dst_height ||
+	    run->hw_fps != run->ax_cap->src_fps) {
+		_LOG_INFO("Using %dx%d %d fps", run->ax_cap->dst_width, run->ax_cap->dst_height, run->ax_cap->src_fps);
+		run->width = run->ax_cap->dst_width;
+		run->height = run->ax_cap->dst_height;
+		run->hw_fps = run->ax_cap->src_fps;
+	}
 #endif
 	run->streamon = true;
 
@@ -387,6 +395,8 @@ void us_capture_close(us_capture_s *cap) {
 
 #ifndef MK_WITH_AX
 	US_CLOSE_FD(run->fd);
+#else
+	us_ax_capture_close(run->ax_cap);
 #endif
 
 	if (say) {

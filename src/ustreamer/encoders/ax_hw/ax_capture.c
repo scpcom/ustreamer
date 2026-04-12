@@ -827,6 +827,35 @@ static bool socket_exists(const char *path)
 	return (sb.st_mode & S_IFMT) == S_IFSOCK;
 }
 
+static char* file_to_string(const char *file, size_t max_len)
+{
+	char *m_ptr = NULL;
+	size_t m_capacity = 0;
+	FILE* fp = fopen(file, "r");
+
+	if(fp) {
+		m_capacity = max_len;
+		if (m_capacity) {
+			m_ptr = (char*)malloc(m_capacity+1);
+		}
+		if (m_ptr) {
+			fgets(m_ptr, m_capacity, fp);
+			m_ptr[m_capacity] = 0;
+		}
+
+		fclose(fp);
+	}
+
+	if (m_ptr) {
+	        uint8_t j=0;
+	        while (m_ptr[j] != '\0' && m_ptr[j] != '\r' && m_ptr[j] != '\n')
+			j++;
+		m_ptr[j] = 0;
+	}
+
+	return m_ptr;
+}
+
 static void us_ax_get_lt_info(us_ax_capture_s *ax_cap)
 {
 	int res;
@@ -925,6 +954,7 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 	us_ax_get_lt_info(ax_cap);
 
 	if (socket_exists("/run/kvm/vin_sock")) {
+		ax_cap->kvm_vin = 1;
 		AXV_LOGI("Capture opened by kvm_vin");
 		return ax_cap;
 	}
@@ -957,6 +987,36 @@ int us_ax_capture_destroy(us_ax_capture_s *ax_cap)
 
 	AXV_LOGI("Capture closed");
 
+	return 0;
+}
+
+int us_ax_capture_open(us_ax_capture_s *ax_cap)
+{
+	int res = 0;
+	char* str;
+	if (ax_cap == NULL) return -1;
+	str = file_to_string("/proc/lt6911_info/status", 32);
+	if (str)
+	{
+		if (!strcmp(str, "disappear")) {
+			ax_cap->no_signal = 1;
+			res = -1;
+		}
+		free(str);
+	}
+	if (res < 0) {
+		return res;
+	}
+	if (ax_cap->no_signal) {
+		us_ax_get_lt_info(ax_cap);
+	}
+	ax_cap->no_signal = 0;
+	return res;
+}
+
+int us_ax_capture_close(us_ax_capture_s *ax_cap)
+{
+	if (ax_cap == NULL) return -1;
 	return 0;
 }
 
