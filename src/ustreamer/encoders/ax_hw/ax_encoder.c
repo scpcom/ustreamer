@@ -481,8 +481,11 @@ int us_ax_get_stream_frame(VENC_CHN VencChn, us_frame_s *frame)
 }
 
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key) {
+	VENC_CHN VencChn;
 	int res;
-	VENC_CHN VencChn = ax_enc->venc_h264_chn;
+
+	if (ax_enc == NULL) return -1;
+	VencChn = ax_enc->venc_h264_chn;
 	if (!ax_enc->venc_h264_run_)
 		return -1;
 	if (force_key)
@@ -494,7 +497,10 @@ int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_
 }
 
 int us_ax_get_mjpeg_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame) {
-	VENC_CHN VencChn = ax_enc->venc_jpeg_chn;
+	VENC_CHN VencChn;
+
+	if (ax_enc == NULL) return -1;
+	VencChn = ax_enc->venc_jpeg_chn;
 	if (!ax_enc->venc_jpeg_run_)
 		return -1;
 	return us_ax_get_stream_frame(VencChn, frame);

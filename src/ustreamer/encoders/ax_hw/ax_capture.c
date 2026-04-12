@@ -874,6 +874,7 @@ int us_ax_get_yuv_frame(us_ax_capture_s *ax_cap, us_frame_s *frame)
   AX_S32 s32Ret;
   AX_IMG_INFO_T capture_img_info;
 
+  if (ax_cap == NULL) return -1;
   memset(&capture_img_info, 0, sizeof(capture_img_info));
   s32Ret = AX_VIN_GetYuvFrame((AX_U8)ax_cap->vin_chn,AX_VIN_CHN_ID_MAIN,&capture_img_info,timeout);
   if (s32Ret != 0) {
