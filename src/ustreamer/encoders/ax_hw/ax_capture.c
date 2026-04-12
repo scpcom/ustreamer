@@ -805,6 +805,17 @@ static void AX_CAP_Deinit(us_ax_capture_s *ax_cap)
   return;
 }
 
+static bool file_exists(const char *path)
+{
+	struct stat sb;
+
+	if (stat(path, &sb) == -1) {
+		return false;
+	}
+
+	return (sb.st_mode & S_IFMT) == S_IFREG;
+}
+
 static bool socket_exists(const char *path)
 {
 	struct stat sb;
@@ -816,9 +827,78 @@ static bool socket_exists(const char *path)
 	return (sb.st_mode & S_IFMT) == S_IFSOCK;
 }
 
+static void us_ax_get_lt_info(us_ax_capture_s *ax_cap)
+{
+	int res;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t fps = 0;
+	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	if (pFile != NULL) {
+		fclose(pFile);
+		pFile = fopen("/proc/lt6911_info/width","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&width);
+			if (res != 1) {
+				width = 0;
+				AXV_LOGE("Failed to read width, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open width file, use default");
+		}
+		pFile = fopen("/proc/lt6911_info/height","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&height);
+			if (res != 1) {
+				height = 0;
+				AXV_LOGE("Failed to read height, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open height file, use default");
+		}
+	}
+	else {
+		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+	}
+	if (width != 0 && height != 0) {
+		ax_cap->dst_width = width;
+		ax_cap->dst_height = height;
+	}
+	else {
+		ax_cap->dst_width = 1920;
+		ax_cap->dst_height = 1080;
+		AXV_LOGE("Width or height is 0, use default values");
+	}
+	pFile = fopen("/proc/lt6911_info/fps","r");
+	if (pFile == NULL) {
+		fps = 60;
+		AXV_LOGE("Failed to open fps file, set fps to 60");
+	}
+	else {
+		res = fscanf(pFile,"%d",&fps);
+		if (res != 1) {
+			fps = 0;
+			AXV_LOGE("Failed to read fps, use default");
+		}
+		fclose(pFile);
+		if (fps == 0) {
+			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
+			fps = 30;
+		}
+	}
+	ax_cap->src_fps = fps;
+	AXV_LOGI("Using %dx%d %d fps", ax_cap->dst_width, ax_cap->dst_height, ax_cap->src_fps);
+}
+
 us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 {
 	bool res;
+	int i;
+
 	us_ax_capture_s *ax_cap = (us_ax_capture_s *)malloc(sizeof(us_ax_capture_s));
 	if (ax_cap == NULL) return NULL;
 
@@ -829,6 +909,20 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 	ax_cap->dst_width  = width;
 	ax_cap->dst_height = height;
 	ax_cap->src_fps    = fps;
+
+	i = 0;
+	while (!file_exists("/proc/lt6911_info/status") && i < 5) {
+		sleep(1);
+		i += 1;
+	}
+
+	i = 0;
+	while (!socket_exists("/run/kvm/vin_sock") && i < 5) {
+		sleep(1);
+		i += 1;
+	}
+
+	us_ax_get_lt_info(ax_cap);
 
 	if (socket_exists("/run/kvm/vin_sock")) {
 		AXV_LOGI("Capture opened by kvm_vin");

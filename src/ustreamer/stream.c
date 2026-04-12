@@ -170,6 +170,9 @@ void us_stream_loop(us_stream_s *stream) {
 #ifndef MK_WITH_AX
 		run->h264_enc = us_m2m_h264_encoder_init("H264", stream->h264_m2m_path, stream->h264_bitrate, stream->h264_gop);
 #else
+		if (cap->run->hw_fps) {
+			cap->desired_fps = cap->run->hw_fps;
+		}
 		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
 		if (ax_enc) {
 			cap->run->width = ax_enc->width;

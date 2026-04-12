@@ -116,75 +116,6 @@ static AX_S32 AX_ENC_VENC_DeInit()
 	return 0;
 }
 
-static void us_ax_get_lt_info(us_ax_encoder_s *ax_enc)
-{
-	int res;
-	uint32_t width = 0;
-	uint32_t height = 0;
-	uint32_t fps = 0;
-	FILE *pFile = fopen("/proc/lt6911_info/status","r");
-	if (pFile != NULL) {
-		fclose(pFile);
-		pFile = fopen("/proc/lt6911_info/width","r");
-		if (pFile != NULL) {
-			res = fscanf(pFile,"%d",&width);
-			if (res != 1) {
-				width = 0;
-				AXV_LOGE("Failed to read width, use default");
-			}
-			fclose(pFile);
-		}
-		else {
-			AXV_LOGE("Failed to open width file, use default");
-		}
-		pFile = fopen("/proc/lt6911_info/height","r");
-		if (pFile != NULL) {
-			res = fscanf(pFile,"%d",&height);
-			if (res != 1) {
-				height = 0;
-				AXV_LOGE("Failed to read height, use default");
-			}
-			fclose(pFile);
-		}
-		else {
-			AXV_LOGE("Failed to open height file, use default");
-		}
-	}
-	else {
-		AXV_LOGE("Failed to open /proc/lt6911_info/status");
-	}
-	if (width != 0 && height != 0) {
-		ax_enc->width = width;
-		ax_enc->height = height;
-	}
-	else {
-		ax_enc->width = 1920;
-		ax_enc->height = 1080;
-		AXV_LOGE("Width or height is 0, use default values");
-	}
-	pFile = fopen("/proc/lt6911_info/fps","r");
-	if (pFile == NULL) {
-		fps = 60;
-		AXV_LOGE("Failed to open fps file, set fps to 60");
-	}
-	else {
-		res = fscanf(pFile,"%d",&fps);
-		if (res != 1) {
-			fps = 0;
-			AXV_LOGE("Failed to read fps, use default");
-		}
-		fclose(pFile);
-		if (fps == 0) {
-			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
-			fps = 30;
-		}
-	}
-	ax_enc->fps = fps;
-	if (!ax_enc->desired_fps)
-		ax_enc->desired_fps = fps;
-	AXV_LOGI("Using %dx%d %d fps", ax_enc->width, ax_enc->height, ax_enc->desired_fps);
-}
-
 int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 {
 	AX_S32 ret;
@@ -197,8 +128,6 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 		AXV_LOGE("Error: encoder was open or meet error, now state is: %d", ax_enc->state_);
 		goto ErrorHandle;
 	}
-
-	us_ax_get_lt_info(ax_enc);
 
 	width = ax_enc->width;
 	height = ax_enc->height;

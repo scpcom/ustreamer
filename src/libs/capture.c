@@ -143,12 +143,11 @@ us_capture_s *us_capture_init(void) {
 #ifndef MK_WITH_AX
 	cap->width = 640;
 	cap->height = 480;
-	cap->format = V4L2_PIX_FMT_YUYV;
 #else
 	cap->width = 1920;
 	cap->height = 1080;
-	cap->format = V4L2_PIX_FMT_H264;
 #endif
+	cap->format = V4L2_PIX_FMT_YUYV;
 	cap->jpeg_quality = 80;
 	cap->standard = V4L2_STD_UNKNOWN;
 	cap->io_method = V4L2_MEMORY_MMAP;
@@ -156,6 +155,21 @@ us_capture_s *us_capture_init(void) {
 	cap->min_frame_size = 128;
 	cap->timeout = 1;
 	cap->run = run;
+
+#ifdef MK_WITH_AX
+	us_ax_capture_s *ax_cap = us_ax_capture_init(cap->width, cap->height, cap->desired_fps);
+	if (!ax_cap) {
+		return cap;
+	}
+	run->ax_cap = ax_cap;
+	run->width = ax_cap->dst_width;
+	run->height = ax_cap->dst_height;
+	run->hw_fps = ax_cap->src_fps;
+	cap->width = ax_cap->dst_width;
+	cap->height = ax_cap->dst_height;
+	cap->desired_fps = ax_cap->src_fps;
+#endif
+
 	return cap;
 }
 
@@ -279,11 +293,12 @@ int us_capture_open(us_capture_s *cap) {
 		goto error;
 	}
 #else
-	us_ax_capture_s *ax_cap = us_ax_capture_init(run->width, run->height, run->hw_fps);
-	if (!ax_cap) {
+	if (!run->ax_cap) {
 		return -1;
 	}
-	run ->ax_cap = ax_cap;
+	run->width = run->ax_cap->dst_width;
+	run->height = run->ax_cap->dst_height;
+	run->hw_fps = run->ax_cap->src_fps;
 #endif
 	run->streamon = true;
 
