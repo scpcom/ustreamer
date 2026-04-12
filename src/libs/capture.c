@@ -174,6 +174,12 @@ us_capture_s *us_capture_init(void) {
 }
 
 void us_capture_destroy(us_capture_s *cap) {
+#ifdef MK_WITH_AX
+	if (cap->run->ax_cap) {
+		us_ax_capture_destroy(cap->run->ax_cap);
+		cap->run->ax_cap = NULL;
+	}
+#endif
 	free(cap->run);
 	free(cap);
 }
@@ -381,11 +387,6 @@ void us_capture_close(us_capture_s *cap) {
 
 #ifndef MK_WITH_AX
 	US_CLOSE_FD(run->fd);
-#else
-	if (run->ax_cap) {
-		us_ax_capture_destroy(run->ax_cap);
-		run->ax_cap = NULL;
-	}
 #endif
 
 	if (say) {
@@ -436,12 +437,18 @@ int us_capture_hwbuf_grab(us_capture_s *cap, us_capture_hwbuf_s **hw) {
 #ifndef MK_WITH_AX
 		const bool new_got = (us_xioctl(run->fd, VIDIOC_DQBUF, &new) >= 0);
 #else
-		int res = 0;
-		const bool new_got = true;
+		int res = -1;
+		if (!run->ax_cap->cap_run)
+			res = 0;
+		else if (!run->bufs[run->cur_index].grabbed)
+			res = us_ax_get_yuv_frame(run->ax_cap, &run->bufs[run->cur_index].raw);
+		const bool new_got = (res >= 0);
 #endif
 
 		if (new_got) {
 #ifdef MK_WITH_AX
+			if (run->ax_cap->cap_run)
+				new.bytesused = run->bufs[run->cur_index].raw.used;
 			new.index = run->cur_index;
 			run->cur_index++;
 			if (run->cur_index >= run->n_bufs) run->cur_index = 0;
