@@ -168,6 +168,7 @@ us_capture_s *us_capture_init(void) {
 	cap->width = ax_cap->dst_width;
 	cap->height = ax_cap->dst_height;
 	cap->desired_fps = ax_cap->src_fps;
+	cap->io_method = V4L2_MEMORY_USERPTR;
 #endif
 
 	return cap;
@@ -368,18 +369,19 @@ void us_capture_close(us_capture_s *cap) {
 	if (run->bufs != NULL) {
 		say = true;
 		_LOG_DEBUG("Releasing HW buffers ...");
-#ifndef MK_WITH_AX
 		for (uint index = 0; index < run->n_bufs; ++index) {
 			us_capture_hwbuf_s *hw = &run->bufs[index];
 
 			US_CLOSE_FD(hw->dma_fd);
 
 			if (cap->io_method == V4L2_MEMORY_MMAP) {
+#ifndef MK_WITH_AX
 				if (hw->raw.allocated > 0 && hw->raw.data != NULL) {
 					if (munmap(hw->raw.data, hw->raw.allocated) < 0) {
 						_LOG_PERROR("Can't unmap HW buffer=%u", index);
 					}
 				}
+#endif
 			} else { // V4L2_MEMORY_USERPTR
 				US_DELETE(hw->raw.data, free);
 			}
@@ -388,7 +390,6 @@ void us_capture_close(us_capture_s *cap) {
 				free(hw->buf.m.planes);
 			}
 		}
-#endif
 		US_DELETE(run->bufs, free);
 		run->n_bufs = 0;
 	}
@@ -846,7 +847,6 @@ probe_only:
 static int _capture_open_format(us_capture_s *cap, bool first) {
 	us_capture_runtime_s *const run = cap->run;
 
-#ifndef MK_WITH_AX
 	const uint stride = us_align_size(run->width, 32) << 1;
 
 	struct v4l2_format fmt = {0};
@@ -866,6 +866,7 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 		fmt.fmt.pix.bytesperline = stride;
 	}
 
+#ifndef MK_WITH_AX
 	// Set format
 	_LOG_DEBUG("Probing device format=%s, stride=%u, resolution=%ux%u ...",
 		_format_to_string_supported(cap->format), stride, run->width, run->height);
@@ -873,6 +874,9 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 		_LOG_PERROR("Can't set device format");
 		return -1;
 	}
+#else
+	fmt.fmt.pix.sizeimage = fmt.fmt.pix.bytesperline * run->height;
+#endif
 
 	if (fmt.type != run->capture_type) {
 		_LOG_ERROR("Capture format mismatch, please report to the developer");
@@ -894,10 +898,8 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	if (first && retry) {
 		return _capture_open_format(cap, false);
 	}
-#endif
 	_LOG_INFO("Using resolution: %ux%u", run->width, run->height);
 
-#ifndef MK_WITH_AX
 	// Check format
 	if (FMT(pixelformat) != cap->format) {
 		_LOG_ERROR("Could not obtain the requested format=%s; driver gave us %s",
@@ -916,9 +918,6 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 	}
 
 	run->format = FMT(pixelformat);
-#else
-	run->format = cap->format;
-#endif
 	_LOG_INFO("Using format: %s", _format_to_string_supported(run->format));
 
 	if (cap->format_swap_rgb) {
@@ -937,13 +936,11 @@ static int _capture_open_format(us_capture_s *cap, bool first) {
 		}
 	}
 
-#ifndef MK_WITH_AX
 	run->stride = FMTS(bytesperline);
 	run->raw_size = FMTS(sizeimage); // Only for userptr
 
 #	undef FMTS
 #	undef FMT
-#endif
 
 	return 0;
 }
@@ -1130,7 +1127,8 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 		return -1;
 	}
 #else
-	req.count = 1;
+	req.count = cap->n_bufs;
+	run->cur_index = 0;
 #endif
 
 	if (req.count < 1) {
@@ -1144,7 +1142,6 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 
 	US_CALLOC(run->bufs, req.count);
 
-#ifndef MK_WITH_AX
 	const uint page_size = getpagesize();
 	const uint buf_size = us_align_size(run->raw_size, page_size);
 
@@ -1157,7 +1154,6 @@ static int _capture_open_io_method_userptr(us_capture_s *cap) {
 			US_CALLOC(hw->buf.m.planes, VIDEO_MAX_PLANES);
 		}
 	}
-#endif
 	return 0;
 }
 
