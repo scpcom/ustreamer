@@ -198,9 +198,79 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 
 	stVencChnAttr.stRcAttr.stH264Cbr.u32BitRate = bitrate;
 
+	ax_enc->stH264Cbr = stVencChnAttr.stRcAttr.stH264Cbr;
+
+	memset(&ax_enc->stH264Vbr, 0, sizeof(ax_enc->stH264Vbr));
+	(ax_enc->stH264Vbr).u32MaxBitRate = ax_enc->stH264Cbr.u32BitRate;
+	(ax_enc->stH264Vbr).u32Gop = ax_enc->stH264Cbr.u32Gop;
+	(ax_enc->stH264Vbr).enVQ = AX_VENC_VBR_QUALITY_LEVEL_INV;
+	(ax_enc->stH264Vbr).u32MaxQp = 44;
+	(ax_enc->stH264Vbr).u32MinQp = 20;
+	(ax_enc->stH264Vbr).u32MaxIQp = 44;
+	(ax_enc->stH264Vbr).u32MinIQp = 20;
+
 	ax_enc->stH264VencChnAttr = stVencChnAttr;
 	ax_enc->venc_h264_chn     = -1;
 	ax_enc->venc_h264_run_    = 1;
+
+	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
+
+	stVencChnAttr.stVencAttr.stCropCfg.bEnable = AX_FALSE;
+	stVencChnAttr.stVencAttr.enRotation = AX_ROTATION_0;
+
+	stVencChnAttr.stVencAttr.enMemSource = AX_MEMORY_SOURCE_CMM;
+	stVencChnAttr.stVencAttr.enType = PT_H265;
+
+	stVencChnAttr.stVencAttr.u32MaxPicWidth = 3840;
+	stVencChnAttr.stVencAttr.u32MaxPicHeight = 2400;
+	stVencChnAttr.stVencAttr.u32BufSize = 13824000;
+
+	stVencChnAttr.stVencAttr.u32PicWidthSrc = width;
+	stVencChnAttr.stVencAttr.u32PicHeightSrc = height;
+
+	stVencChnAttr.stVencAttr.enLinkMode = AX_LINK_MODE;
+	stVencChnAttr.stVencAttr.bRefRingbuf = AX_TRUE;
+	stVencChnAttr.stVencAttr.s32StopWaitTime = -1;
+
+	stVencChnAttr.stVencAttr.u8InFifoDepth = 1;
+	stVencChnAttr.stVencAttr.u8OutFifoDepth = 2;
+
+	stVencChnAttr.stGopAttr.enGopMode = AX_VENC_GOPMODE_NORMALP;
+
+	stVencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = fps;
+	stVencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = desired_fps;
+
+	stVencChnAttr.stRcAttr.enRcMode = AX_VENC_RC_MODE_H265CBR;
+	stVencChnAttr.stRcAttr.s32FirstFrameStartQp = -1;
+
+	stVencChnAttr.stRcAttr.stH265Cbr.u32Gop = gop;
+	if (stVencChnAttr.stRcAttr.stH265Cbr.u32Gop == 0) {
+		stVencChnAttr.stRcAttr.stH265Cbr.u32Gop = 30000;
+	}
+
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MaxQp = 35;
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MinQp = 10;
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MaxIQp = 35;
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MinIQp = 10;
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MaxIprop = 40;
+	stVencChnAttr.stRcAttr.stH265Cbr.u32MinIprop = 30;
+
+	stVencChnAttr.stRcAttr.stH265Cbr.u32BitRate = bitrate;
+
+	ax_enc->stH265Cbr = stVencChnAttr.stRcAttr.stH265Cbr;
+
+	memset(&ax_enc->stH265Vbr, 0, sizeof(ax_enc->stH265Vbr));
+	(ax_enc->stH265Vbr).u32MaxBitRate = ax_enc->stH265Cbr.u32BitRate;
+	(ax_enc->stH265Vbr).u32Gop = ax_enc->stH265Cbr.u32Gop;
+	(ax_enc->stH265Vbr).enVQ = AX_VENC_VBR_QUALITY_LEVEL_INV;
+	(ax_enc->stH265Vbr).u32MaxQp = 44;
+	(ax_enc->stH265Vbr).u32MinQp = 20;
+	(ax_enc->stH265Vbr).u32MaxIQp = 44;
+	(ax_enc->stH265Vbr).u32MinIQp = 20;
+
+	ax_enc->stH265VencChnAttr = stVencChnAttr;
+	ax_enc->venc_h265_chn     = -1;
+	ax_enc->venc_h265_run_    = 0;
 
 	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
 
@@ -248,7 +318,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	ax_enc->venc_jpeg_run_    = 0;
 
 	AX_SYS_Init();
-	if (ax_enc->venc_h264_run_ || ax_enc->venc_jpeg_run_) {
+	if (ax_enc->venc_h264_run_ || ax_enc->venc_h265_run_ || ax_enc->venc_jpeg_run_) {
 		AX_ENC_VENC_Init();
 	}
 	if (ax_enc->venc_h264_run_) {
@@ -260,8 +330,14 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 		pthread_create(&ax_enc->venc_thread_id_, NULL, VencGetStreamProc, NULL);
 #endif
 	}
+	if (ax_enc->venc_h265_run_) {
+		ax_enc->venc_h265_chn = ax_enc->venc_h264_chn + 1;
+		ret = AX_ENC_VENC_Chn_Init(&ax_enc->venc_h265_chn, &ax_enc->stH265VencChnAttr);
+		if (0 != ret)
+			ax_enc->venc_h265_run_ = 0;
+	}
 	if (ax_enc->venc_jpeg_run_) {
-		ax_enc->venc_jpeg_chn = ax_enc->venc_h264_chn + 1;
+		ax_enc->venc_jpeg_chn = (ax_enc->venc_h265_run_ ? ax_enc->venc_h265_chn : ax_enc->venc_h264_chn) + 1;
 		ret = AX_ENC_VENC_Chn_Init(&ax_enc->venc_jpeg_chn, &ax_enc->stJPEGVencChnAttr);
 		if (0 != ret)
 			ax_enc->venc_jpeg_run_ = 0;
@@ -329,10 +405,14 @@ int us_ax_encoder_destroy(us_ax_encoder_s *ax_enc)
 #if 0
 	pthread_join(ax_enc->venc_thread_id_, NULL);
 #endif
-	venc_run = ax_enc->venc_h264_run_ || ax_enc->venc_jpeg_run_;
+	venc_run = ax_enc->venc_h264_run_ || ax_enc->venc_h265_run_ || ax_enc->venc_jpeg_run_;
 	if (ax_enc->venc_h264_run_) {
 		AX_ENC_VENC_Chn_DeInit(&ax_enc->venc_h264_chn, &ax_enc->stH264VencChnAttr);
 		ax_enc->venc_h264_run_ = 0;
+	}
+	if (ax_enc->venc_h265_run_) {
+		AX_ENC_VENC_Chn_DeInit(&ax_enc->venc_h265_chn, &ax_enc->stH265VencChnAttr);
+		ax_enc->venc_h265_run_ = 0;
 	}
 	if (ax_enc->venc_jpeg_run_) {
 		AX_ENC_VENC_Chn_DeInit(&ax_enc->venc_jpeg_chn, &ax_enc->stJPEGVencChnAttr);
@@ -406,6 +486,27 @@ done:
   return iRet;
 }
 
+int us_ax_get_fps(VENC_CHN chn,int *src_fps,int *dst_fps)
+{
+  AX_S32 s32Ret;
+  AX_VENC_RC_PARAM_T stRcParam;
+
+  memset(&stRcParam, 0, sizeof(stRcParam));
+  s32Ret = AX_VENC_GetRcParam(chn,&stRcParam);
+  if (s32Ret == 0) {
+    if (src_fps != NULL) {
+      *src_fps = stRcParam.stFrameRate.fSrcFrameRate;
+    }
+    if (dst_fps != NULL) {
+      *dst_fps = stRcParam.stFrameRate.fDstFrameRate;
+    }
+    return 0;
+  }
+
+  AXV_LOGE("AX_VENC_GetRcParam failed, ret=0x%x", s32Ret);
+  return -1;
+}
+
 int us_ax_set_fps(VENC_CHN chn, uint32_t fps)
 {
   AX_S32 s32Ret;
@@ -430,6 +531,115 @@ done:
   return iRet;
 }
 
+int us_ax_set_rate_control(us_ax_encoder_s *ax_enc,VENC_CHN chn,AX_VENC_RC_MODE_E rcMode)
+{
+  AX_S32 s32Ret;
+  AX_VENC_H264_VBR_T *stH26xVbr;
+  AX_VENC_RC_PARAM_T stRcParam;
+
+  memset(&stRcParam, 0, sizeof(stRcParam));
+  s32Ret = AX_VENC_GetRcParam(chn,&stRcParam);
+  if (s32Ret != 0) {
+    AXV_LOGE("AX_VENC_GetRcParam failed, ret=0x%x", s32Ret);
+    //assert
+    return -1;
+  }
+  if (stRcParam.enRcMode != rcMode) {
+    if (rcMode == AX_VENC_RC_MODE_H264CBR || rcMode == AX_VENC_RC_MODE_H265CBR) {
+      stRcParam.enRcMode = rcMode;
+      if (rcMode == AX_VENC_RC_MODE_H264CBR) {
+        (ax_enc->stH264Cbr).u32Gop = stRcParam.stH264Cbr.u32Gop;
+        (ax_enc->stH264Cbr).u32BitRate = stRcParam.stH264Cbr.u32BitRate;
+        stRcParam.stH264Cbr.u32BitRate = (ax_enc->stH264Cbr).u32BitRate;
+        stRcParam.stH264Cbr.u32MaxQp = (ax_enc->stH264Cbr).u32MaxQp;
+        stRcParam.stH264Cbr.u32Gop = (ax_enc->stH264Cbr).u32Gop;
+        stRcParam.stH264Cbr.u32StatTime = (ax_enc->stH264Cbr).u32StatTime;
+        stRcParam.stH264Cbr.u32MinIQp = (ax_enc->stH264Cbr).u32MinIQp;
+        stRcParam.stH264Cbr.u32MaxIprop = (ax_enc->stH264Cbr).u32MaxIprop;
+        stRcParam.stH264Cbr.u32MinQp = (ax_enc->stH264Cbr).u32MinQp;
+        stRcParam.stH264Cbr.u32MaxIQp = (ax_enc->stH264Cbr).u32MaxIQp;
+        stRcParam.stH264Cbr.s32DeBreathQpDelta = (ax_enc->stH264Cbr).s32DeBreathQpDelta;
+        stRcParam.stH264Cbr.u32IdrQpDeltaRange = (ax_enc->stH264Cbr).u32IdrQpDeltaRange;
+        stRcParam.stH264Cbr.u32MinIprop = (ax_enc->stH264Cbr).u32MinIprop;
+        stRcParam.stH264Cbr.s32IntraQpDelta = (ax_enc->stH264Cbr).s32IntraQpDelta;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapBlockType =
+             (ax_enc->stH264Cbr).stQpmapInfo.enQpmapBlockType;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapBlockUnit =
+             (ax_enc->stH264Cbr).stQpmapInfo.enQpmapBlockUnit;
+        stRcParam.stH264Cbr.stQpmapInfo.enCtbRcMode = (ax_enc->stH264Cbr).stQpmapInfo.enCtbRcMode;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapQpType =
+             (ax_enc->stH264Cbr).stQpmapInfo.enQpmapQpType;
+      }
+      else {
+        (ax_enc->stH265Cbr).u32Gop = stRcParam.stH264Cbr.u32Gop;
+        (ax_enc->stH265Cbr).u32BitRate = stRcParam.stH264Cbr.u32BitRate;
+        stRcParam.stH264Cbr.u32BitRate = (ax_enc->stH265Cbr).u32BitRate;
+        stRcParam.stH264Cbr.u32MaxQp = (ax_enc->stH265Cbr).u32MaxQp;
+        stRcParam.stH264Cbr.u32Gop = (ax_enc->stH265Cbr).u32Gop;
+        stRcParam.stH264Cbr.u32StatTime = (ax_enc->stH265Cbr).u32StatTime;
+        stRcParam.stH264Cbr.u32MinIQp = (ax_enc->stH265Cbr).u32MinIQp;
+        stRcParam.stH264Cbr.u32MaxIprop = (ax_enc->stH265Cbr).u32MaxIprop;
+        stRcParam.stH264Cbr.u32MinQp = (ax_enc->stH265Cbr).u32MinQp;
+        stRcParam.stH264Cbr.u32MaxIQp = (ax_enc->stH265Cbr).u32MaxIQp;
+        stRcParam.stH264Cbr.s32DeBreathQpDelta = (ax_enc->stH265Cbr).s32DeBreathQpDelta;
+        stRcParam.stH264Cbr.u32IdrQpDeltaRange = (ax_enc->stH265Cbr).u32IdrQpDeltaRange;
+        stRcParam.stH264Cbr.u32MinIprop = (ax_enc->stH265Cbr).u32MinIprop;
+        stRcParam.stH264Cbr.s32IntraQpDelta = (ax_enc->stH265Cbr).s32IntraQpDelta;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapBlockType =
+             (ax_enc->stH265Cbr).stQpmapInfo.enQpmapBlockType;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapBlockUnit =
+             (ax_enc->stH265Cbr).stQpmapInfo.enQpmapBlockUnit;
+        stRcParam.stH264Cbr.stQpmapInfo.enCtbRcMode = (ax_enc->stH265Cbr).stQpmapInfo.enCtbRcMode;
+        stRcParam.stH264Cbr.stQpmapInfo.enQpmapQpType =
+             (ax_enc->stH265Cbr).stQpmapInfo.enQpmapQpType;
+      }
+      s32Ret = AX_VENC_SetRcParam(chn,&stRcParam);
+    }
+    else {
+      if (rcMode != AX_VENC_RC_MODE_H264VBR && rcMode != AX_VENC_RC_MODE_H265VBR) {
+        AXV_LOGE("Unsupported RC mode: %d", rcMode);
+        // assert
+        return -1;
+      }
+      stRcParam.enRcMode = rcMode;
+      if (rcMode == AX_VENC_RC_MODE_H264VBR) {
+        stH26xVbr = &ax_enc->stH264Vbr;
+        (ax_enc->stH264Vbr).u32Gop = stRcParam.stH264Vbr.u32Gop;
+        (ax_enc->stH264Vbr).u32MaxBitRate = stRcParam.stH264Vbr.u32MaxBitRate;
+      }
+      else {
+        stH26xVbr = &ax_enc->stH265Vbr;
+        (ax_enc->stH265Vbr).u32Gop = stRcParam.stH264Vbr.u32Gop;
+        (ax_enc->stH265Vbr).u32MaxBitRate = stRcParam.stH264Vbr.u32MaxBitRate;
+      }
+      stRcParam.stH264Vbr.u32MaxBitRate = stH26xVbr->u32MaxBitRate;
+      stRcParam.stH264Vbr.enVQ = stH26xVbr->enVQ;
+      stRcParam.stH264Vbr.u32Gop = stH26xVbr->u32Gop;
+      stRcParam.stH264Vbr.u32StatTime = stH26xVbr->u32StatTime;
+      stRcParam.stH264Vbr.u32MaxIQp = stH26xVbr->u32MaxIQp;
+      stRcParam.stH264Vbr.u32MinIQp = stH26xVbr->u32MinIQp;
+      stRcParam.stH264Vbr.u32MaxQp = stH26xVbr->u32MaxQp;
+      stRcParam.stH264Vbr.u32MinQp = stH26xVbr->u32MinQp;
+      stRcParam.stH264Vbr.u32IdrQpDeltaRange = stH26xVbr->u32IdrQpDeltaRange;
+      stRcParam.stH264Vbr.stQpmapInfo.enCtbRcMode = (stH26xVbr->stQpmapInfo).enCtbRcMode;
+      stRcParam.stH264Vbr.s32IntraQpDelta = stH26xVbr->s32IntraQpDelta;
+      stRcParam.stH264Vbr.s32DeBreathQpDelta = stH26xVbr->s32DeBreathQpDelta;
+      stRcParam.stH264Vbr.stQpmapInfo.enQpmapBlockUnit = (stH26xVbr->stQpmapInfo).enQpmapBlockUnit;
+      stRcParam.stH264Vbr.stQpmapInfo.enQpmapQpType = (stH26xVbr->stQpmapInfo).enQpmapQpType;
+      stRcParam.stH264Vbr.stQpmapInfo.enQpmapBlockType = (stH26xVbr->stQpmapInfo).enQpmapBlockType;
+      stRcParam.stH264Vbr.u32SceneChgThr = stH26xVbr->u32SceneChgThr;
+      stRcParam.stH264Vbr.u32ChangePos = stH26xVbr->u32ChangePos;
+      s32Ret = AX_VENC_SetRcParam(chn,&stRcParam);
+    }
+    if (s32Ret != 0) {
+      AXV_LOGE("AX_VENC_SetRcParam failed, ret=0x%x", s32Ret);
+      // assert
+      return -1;
+    }
+  }
+  return 0;
+}
+
 int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps)
 {
 	if (ax_enc->width == width &&
@@ -448,6 +658,11 @@ int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height
 		us_ax_set_resolution(ax_enc->venc_jpeg_chn, ax_enc->width, ax_enc->height);
 		us_ax_set_fps(ax_enc->venc_jpeg_chn, ax_enc->fps);
 		us_ax_enable_stream(ax_enc->venc_jpeg_chn);
+	}
+	if (ax_enc->venc_h265_run_) {
+		us_ax_set_resolution(ax_enc->venc_h265_chn, ax_enc->width, ax_enc->height);
+		us_ax_set_fps(ax_enc->venc_h265_chn, ax_enc->fps);
+		us_ax_enable_stream(ax_enc->venc_h265_chn);
 	}
 	if (ax_enc->venc_h264_run_) {
 		us_ax_set_resolution(ax_enc->venc_h264_chn, ax_enc->width, ax_enc->height);
@@ -501,6 +716,22 @@ int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_
 	if (ax_enc == NULL) return -1;
 	VencChn = ax_enc->venc_h264_chn;
 	if (!ax_enc->venc_h264_run_)
+		return -1;
+	if (force_key)
+		us_ax_request_key_frame(VencChn);
+	res = us_ax_get_stream_frame(VencChn, frame);
+	if (res == 0)
+		return 4;
+	return res;
+}
+
+int us_ax_get_h265_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key) {
+	VENC_CHN VencChn;
+	int res;
+
+	if (ax_enc == NULL) return -1;
+	VencChn = ax_enc->venc_h265_chn;
+	if (!ax_enc->venc_h265_run_)
 		return -1;
 	if (force_key)
 		us_ax_request_key_frame(VencChn);

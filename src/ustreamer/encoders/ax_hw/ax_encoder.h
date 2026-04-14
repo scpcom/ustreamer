@@ -31,14 +31,22 @@ typedef struct us_ax_encoder_s {
 	uint32_t gop;
 	int state_;
 
+	AX_VENC_H264_CBR_T stH264Cbr;
+	AX_VENC_H264_VBR_T stH264Vbr;
+	AX_VENC_H265_CBR_T stH265Cbr;
+	AX_VENC_H265_VBR_T stH265Vbr;
+
 	AX_VENC_CHN_ATTR_T stH264VencChnAttr;
+	AX_VENC_CHN_ATTR_T stH265VencChnAttr;
 	AX_VENC_CHN_ATTR_T stJPEGVencChnAttr;
 #if 0
 	pthread_t venc_thread_id_;
 #endif
 	int venc_h264_run_;
+	int venc_h265_run_;
 	int venc_jpeg_run_;
 	VENC_CHN venc_h264_chn;
+	VENC_CHN venc_h265_chn;
 	VENC_CHN venc_jpeg_chn;
 } us_ax_encoder_s;
 
@@ -51,6 +59,7 @@ int us_ax_disable_stream(VENC_CHN VencChn);
 int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps);
 
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);
+int us_ax_get_h265_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);
 int us_ax_get_mjpeg_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame);
 
 #if __cplusplus
