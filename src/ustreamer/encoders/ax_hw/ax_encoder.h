@@ -55,8 +55,14 @@ int us_ax_encoder_destroy(us_ax_encoder_s *ax_enc);
 
 int us_ax_enable_stream(VENC_CHN VencChn);
 int us_ax_disable_stream(VENC_CHN VencChn);
+int us_ax_disable_all_stream(us_ax_encoder_s *ax_enc);
 
 int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps);
+
+int us_ax_set_resolution(VENC_CHN chn, AX_U32 width, AX_U32 height);
+int us_ax_set_fps(VENC_CHN chn, uint32_t fps);
+int us_ax_set_gop(VENC_CHN chn, uint32_t gop);
+int us_ax_set_rate_control(us_ax_encoder_s *ax_enc, VENC_CHN chn, AX_VENC_RC_MODE_E rcMode);
 
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);
 int us_ax_get_h265_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);
