@@ -67,6 +67,9 @@ endif
 ifneq ($(MK_WITH_JANUS),)
 	+ $(MAKE) janus
 endif
+ifneq ($(MK_WITH_AX),)
+	+ $(MAKE) kvm_vision
+endif
 
 
 apps:
@@ -86,6 +89,11 @@ janus:
 	$(ECHO) ln -sf janus/*.so .
 
 
+kvm_vision:
+	$(MAKE) -C kvm_vision
+	$(ECHO) ln -sf kvm_vision/*.so.*.*.* .
+
+
 install: all
 	$(MAKE) -C src install
 ifneq ($(MK_WITH_PYTHON),)
@@ -93,6 +101,9 @@ ifneq ($(MK_WITH_PYTHON),)
 endif
 ifneq ($(MK_WITH_JANUS),)
 	$(MAKE) -C janus install
+endif
+ifneq ($(MK_WITH_AX),)
+	$(MAKE) -C kvm_vision install
 endif
 	mkdir -p $(R_DESTDIR)$(MANPREFIX)/man1
 	for man in $(shell ls man); do \
@@ -158,6 +169,7 @@ clean:
 	$(MAKE) -C src clean
 	$(MAKE) -C python clean
 	$(MAKE) -C janus clean
+	$(MAKE) -C kvm_vision clean
 
 
 .PHONY: python janus linters
