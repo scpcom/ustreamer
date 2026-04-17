@@ -74,3 +74,32 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 	ax_mode->fps = fps;
 	AXV_LOGI("Using %dx%d %d fps", ax_mode->width, ax_mode->height, ax_mode->fps);
 }
+
+int us_ax_set_lt_power(uint8_t _en)
+{
+	int res = 0;
+	char value = _en ? '1' : '0';
+	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	if (pFile != NULL) {
+		fclose(pFile);
+		res = -1;
+		pFile = fopen("/proc/lt6911_info/power","w");
+		if (pFile != NULL) {
+			res = fwrite(&value, 1, 1, pFile);
+			if (res != 1) {
+				AXV_LOGE("Failed to write power");
+			}
+			else {
+				res = 0;
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open power file");
+		}
+	}
+	else {
+		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+	}
+	return res;
+}

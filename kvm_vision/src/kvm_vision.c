@@ -184,7 +184,7 @@ void kvmv_free_all_data(void)
 
 int kvmv_hdmi_control(uint8_t _en)
 {
-  return 0;
+  return us_ax_set_lt_power(_en);
 }
 
 int kvmv_get_pps_frame(uint8_t **_pp_kvm_data,uint32_t *_p_kvmv_data_size)

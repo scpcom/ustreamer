@@ -21,6 +21,7 @@ typedef struct {
 } us_ax_mode_s;
 
 void us_ax_get_lt_info(us_ax_mode_s *ax_mode);
+int us_ax_set_lt_power(uint8_t _en);
 
 #if __cplusplus
 }
