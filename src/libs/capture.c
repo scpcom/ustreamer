@@ -162,12 +162,12 @@ us_capture_s *us_capture_init(void) {
 		return cap;
 	}
 	run->ax_cap = ax_cap;
-	run->width = ax_cap->dst_width;
-	run->height = ax_cap->dst_height;
-	run->hw_fps = ax_cap->src_fps;
-	cap->width = ax_cap->dst_width;
-	cap->height = ax_cap->dst_height;
-	cap->desired_fps = ax_cap->src_fps;
+	run->width = ax_cap->mode.width;
+	run->height = ax_cap->mode.height;
+	run->hw_fps = ax_cap->mode.fps;
+	cap->width = ax_cap->mode.width;
+	cap->height = ax_cap->mode.height;
+	cap->desired_fps = ax_cap->mode.fps;
 	cap->io_method = V4L2_MEMORY_USERPTR;
 #endif
 
@@ -306,13 +306,13 @@ int us_capture_open(us_capture_s *cap) {
 	if (us_ax_capture_open(run->ax_cap) < 0) {
 		goto error_no_signal;
 	}
-	if (run->width != run->ax_cap->dst_width ||
-	    run->height != run->ax_cap->dst_height ||
-	    run->hw_fps != run->ax_cap->src_fps) {
-		_LOG_INFO("Using %dx%d %d fps", run->ax_cap->dst_width, run->ax_cap->dst_height, run->ax_cap->src_fps);
-		run->width = run->ax_cap->dst_width;
-		run->height = run->ax_cap->dst_height;
-		run->hw_fps = run->ax_cap->src_fps;
+	if (run->width != run->ax_cap->mode.width ||
+	    run->height != run->ax_cap->mode.height ||
+	    run->hw_fps != run->ax_cap->mode.fps) {
+		_LOG_INFO("Using %dx%d %d fps", run->ax_cap->mode.width, run->ax_cap->mode.height, run->ax_cap->mode.fps);
+		run->width = run->ax_cap->mode.width;
+		run->height = run->ax_cap->mode.height;
+		run->hw_fps = run->ax_cap->mode.fps;
 	}
 #endif
 	run->streamon = true;

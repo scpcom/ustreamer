@@ -24,7 +24,6 @@
 #include "ax_mipi_rx_api.h"
 
 #include "ax_capture.h"
-#include "ax_encoder.h"
 
 static bool AX_CAP_VIN_Init(us_ax_capture_s *ax_cap, uint32_t max_width, uint32_t max_height)
 {
@@ -326,8 +325,8 @@ static bool AX_CAP_ISP_StreamOn(us_ax_capture_s *ax_cap)
     tDevAttr.tFrameRateCtrl.fDstFrameRate = 1.0;
     tDevAttr.tMipiIntfAttr.szImgDt[0] = 0x1e;
 
-    tDevAttr.tDevImgRgn[0].nWidth = ax_cap->dst_width;
-    tDevAttr.tDevImgRgn[0].nHeight = ax_cap->dst_height;
+    tDevAttr.tDevImgRgn[0].nWidth = ax_cap->mode.width;
+    tDevAttr.tDevImgRgn[0].nHeight = ax_cap->mode.height;
     tDevAttr.tDevImgRgn[1].nWidth = tDevAttr.tDevImgRgn[0].nWidth;
     tDevAttr.tDevImgRgn[1].nHeight = tDevAttr.tDevImgRgn[0].nHeight;
     tDevAttr.tDevImgRgn[2].nWidth = tDevAttr.tDevImgRgn[0].nWidth;
@@ -387,9 +386,9 @@ static bool AX_CAP_ISP_StreamOn(us_ax_capture_s *ax_cap)
             tPipeAttr.eBayerPattern = AX_BP_BGGR;
             tPipeAttr.ePixelFmt = AX_FORMAT_BAYER_RAW_16BPP;
             tPipeAttr.eSnsMode = AX_SNS_LINEAR_ONLY_MODE;
-            tPipeAttr.tPipeImgRgn.nWidth = ax_cap->dst_width;
+            tPipeAttr.tPipeImgRgn.nWidth = ax_cap->mode.width;
             tPipeAttr.nWidthStride = tPipeAttr.tPipeImgRgn.nWidth;
-            tPipeAttr.tPipeImgRgn.nHeight = ax_cap->dst_height;
+            tPipeAttr.tPipeImgRgn.nHeight = ax_cap->mode.height;
             s32Ret = AX_VIN_CreatePipe((AX_U8)ax_cap->vin_chn,&tPipeAttr);
             if (s32Ret == 0) {
               s32Ret = AX_VIN_SetPipeAttr((AX_U8)ax_cap->vin_chn,&tPipeAttr);
@@ -413,8 +412,8 @@ static bool AX_CAP_ISP_StreamOn(us_ax_capture_s *ax_cap)
                     tSnsAttr.eMasterSlaveSel = AX_SNS_MASTER;
                     tSnsAttr.nSettingIndex = 0;
                     tSnsAttr.eSnsOutputMode = AX_SNS_NORMAL;
-                    tSnsAttr.nWidth = ax_cap->dst_width;
-                    tSnsAttr.nHeight = ax_cap->dst_height;
+                    tSnsAttr.nWidth = ax_cap->mode.width;
+                    tSnsAttr.nHeight = ax_cap->mode.height;
                     s32Ret = AX_ISP_SetSnsAttr((AX_U8)ax_cap->vin_chn,&tSnsAttr);
                     if (s32Ret == 0) {
                       s32Ret = AX_ISP_Create((AX_U8)ax_cap->vin_chn);
@@ -423,13 +422,13 @@ static bool AX_CAP_ISP_StreamOn(us_ax_capture_s *ax_cap)
                         if (s32Ret == 0) {
                           tChnAttr.eImgFormat = AX_FORMAT_YUV420_SEMIPLANAR;
                           tChnAttr.nDepth = 1;
-                          tChnAttr.nWidth = ax_cap->dst_width;
-                          tChnAttr.nHeight = ax_cap->dst_height;
+                          tChnAttr.nWidth = ax_cap->mode.width;
+                          tChnAttr.nHeight = ax_cap->mode.height;
                           tChnAttr.tCompressInfo.enCompressMode = AX_COMPRESS_MODE_NONE;
                           tChnAttr.tCompressInfo.u32CompressLevel = 0;
                           tChnAttr.tFrameRateCtrl.fSrcFrameRate = 0.0;
                           tChnAttr.tFrameRateCtrl.fDstFrameRate = 0.0;
-                          tChnAttr.nWidthStride = ax_cap->dst_width;
+                          tChnAttr.nWidthStride = ax_cap->mode.width;
                           s32Ret = AX_VIN_SetChnAttr((AX_U8)ax_cap->vin_chn,ax_cap->vin_chn,
                                                         &tChnAttr);
                           if (s32Ret == 0) {
@@ -607,14 +606,14 @@ static bool AX_CAP_IVPS_Init(us_ax_capture_s *ax_cap)
     s32Ret = AX_IVPS_CreateGrp(0,&stGrpAttr);
     if (s32Ret == 0) {
       memset(&stPipelineAttr, 0, sizeof(stPipelineAttr));
-      stPipelineAttr.tFilter[0][0].nDstPicWidth = (AX_U16)ax_cap->dst_width;
-      stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)ax_cap->dst_height;
+      stPipelineAttr.tFilter[0][0].nDstPicWidth = (AX_U16)ax_cap->mode.width;
+      stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)ax_cap->mode.height;
       stPipelineAttr.tFilter[0][0].nDstPicStride =
            (stPipelineAttr.tFilter[0][0].nDstPicWidth + 0xf) & 0xfff0;
       stPipelineAttr.tFilter[1][1].nDstPicWidth = 0x140;
       stPipelineAttr.tFilter[1][1].nDstPicHeight = 0xac;
       stPipelineAttr.tFilter[1][1].nDstPicStride = 0x140;
-      stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate = (AX_F32)(int)ax_cap->src_fps;
+      stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate = (AX_F32)(int)ax_cap->mode.fps;
       stPipelineAttr.tFilter[1][1].eDstPicFormat = AX_FORMAT_RGB565;
       stPipelineAttr.nOutChnNum = '\x01';
       stPipelineAttr.nInDebugFifoDepth = 0;
@@ -856,73 +855,6 @@ static char* file_to_string(const char *file, size_t max_len)
 	return m_ptr;
 }
 
-static void us_ax_get_lt_info(us_ax_capture_s *ax_cap)
-{
-	int res;
-	uint32_t width = 0;
-	uint32_t height = 0;
-	uint32_t fps = 0;
-	FILE *pFile = fopen("/proc/lt6911_info/status","r");
-	if (pFile != NULL) {
-		fclose(pFile);
-		pFile = fopen("/proc/lt6911_info/width","r");
-		if (pFile != NULL) {
-			res = fscanf(pFile,"%d",&width);
-			if (res != 1) {
-				width = 0;
-				AXV_LOGE("Failed to read width, use default");
-			}
-			fclose(pFile);
-		}
-		else {
-			AXV_LOGE("Failed to open width file, use default");
-		}
-		pFile = fopen("/proc/lt6911_info/height","r");
-		if (pFile != NULL) {
-			res = fscanf(pFile,"%d",&height);
-			if (res != 1) {
-				height = 0;
-				AXV_LOGE("Failed to read height, use default");
-			}
-			fclose(pFile);
-		}
-		else {
-			AXV_LOGE("Failed to open height file, use default");
-		}
-	}
-	else {
-		AXV_LOGE("Failed to open /proc/lt6911_info/status");
-	}
-	if (width != 0 && height != 0) {
-		ax_cap->dst_width = width;
-		ax_cap->dst_height = height;
-	}
-	else {
-		ax_cap->dst_width = 1920;
-		ax_cap->dst_height = 1080;
-		AXV_LOGE("Width or height is 0, use default values");
-	}
-	pFile = fopen("/proc/lt6911_info/fps","r");
-	if (pFile == NULL) {
-		fps = 60;
-		AXV_LOGE("Failed to open fps file, set fps to 60");
-	}
-	else {
-		res = fscanf(pFile,"%d",&fps);
-		if (res != 1) {
-			fps = 0;
-			AXV_LOGE("Failed to read fps, use default");
-		}
-		fclose(pFile);
-		if (fps == 0) {
-			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
-			fps = 30;
-		}
-	}
-	ax_cap->src_fps = fps;
-	AXV_LOGI("Using %dx%d %d fps", ax_cap->dst_width, ax_cap->dst_height, ax_cap->src_fps);
-}
-
 us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 {
 	bool res;
@@ -935,9 +867,9 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 
 	memset(ax_cap, 0, sizeof(us_ax_capture_s));
 
-	ax_cap->dst_width  = width;
-	ax_cap->dst_height = height;
-	ax_cap->src_fps    = fps;
+	ax_cap->mode.width  = width;
+	ax_cap->mode.height = height;
+	ax_cap->mode.fps    = fps;
 
 	i = 0;
 	while (!file_exists("/proc/lt6911_info/status") && i < 5) {
@@ -951,7 +883,7 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 		i += 1;
 	}
 
-	us_ax_get_lt_info(ax_cap);
+	us_ax_get_lt_info(&ax_cap->mode);
 
 	if (socket_exists("/run/kvm/vin_sock")) {
 		ax_cap->kvm_vin = 1;
@@ -1008,7 +940,7 @@ int us_ax_capture_open(us_ax_capture_s *ax_cap)
 		return res;
 	}
 	if (ax_cap->no_signal) {
-		us_ax_get_lt_info(ax_cap);
+		us_ax_get_lt_info(&ax_cap->mode);
 	}
 	ax_cap->no_signal = 0;
 	return res;

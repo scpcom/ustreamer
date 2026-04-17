@@ -1,0 +1,76 @@
+#include <fcntl.h> /* low-level i/o */
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "../../../libs/logging.h"
+
+#include "ax_common.h"
+
+void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
+{
+	int res;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t fps = 0;
+	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	if (pFile != NULL) {
+		fclose(pFile);
+		pFile = fopen("/proc/lt6911_info/width","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&width);
+			if (res != 1) {
+				width = 0;
+				AXV_LOGE("Failed to read width, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open width file, use default");
+		}
+		pFile = fopen("/proc/lt6911_info/height","r");
+		if (pFile != NULL) {
+			res = fscanf(pFile,"%d",&height);
+			if (res != 1) {
+				height = 0;
+				AXV_LOGE("Failed to read height, use default");
+			}
+			fclose(pFile);
+		}
+		else {
+			AXV_LOGE("Failed to open height file, use default");
+		}
+	}
+	else {
+		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+	}
+	if (width != 0 && height != 0) {
+		ax_mode->width = width;
+		ax_mode->height = height;
+	}
+	else {
+		ax_mode->width = 1920;
+		ax_mode->height = 1080;
+		AXV_LOGE("Width or height is 0, use default values");
+	}
+	pFile = fopen("/proc/lt6911_info/fps","r");
+	if (pFile == NULL) {
+		fps = 60;
+		AXV_LOGE("Failed to open fps file, set fps to 60");
+	}
+	else {
+		res = fscanf(pFile,"%d",&fps);
+		if (res != 1) {
+			fps = 0;
+			AXV_LOGE("Failed to read fps, use default");
+		}
+		fclose(pFile);
+		if (fps == 0) {
+			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
+			fps = 30;
+		}
+	}
+	ax_mode->fps = fps;
+	AXV_LOGI("Using %dx%d %d fps", ax_mode->width, ax_mode->height, ax_mode->fps);
+}

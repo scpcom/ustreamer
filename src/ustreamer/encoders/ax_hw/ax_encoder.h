@@ -6,14 +6,7 @@
 #include <ax_venc_comm.h>
 #define CONFIG_DEVNAME_LEN     32
 
-#ifdef AXV_DEBUG
-#define AXV_LOGD(x_msg, ...)	US_LOG_INFO("AX: " x_msg, ##__VA_ARGS__)
-#else
-#define AXV_LOGD(x_msg, ...)
-#endif
-#define AXV_LOGI(x_msg, ...)	US_LOG_INFO("AX: " x_msg, ##__VA_ARGS__)
-#define AXV_LOGW(x_msg, ...)	US_LOG_INFO("AX: " x_msg, ##__VA_ARGS__)
-#define AXV_LOGE(x_msg, ...)	US_LOG_ERROR("AX: " x_msg, ##__VA_ARGS__)
+#include "ax_common.h"
 
 #if __cplusplus
 extern "C" {
