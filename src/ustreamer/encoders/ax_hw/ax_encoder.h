@@ -62,6 +62,8 @@ int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height
 int us_ax_set_resolution(VENC_CHN chn, AX_U32 width, AX_U32 height);
 int us_ax_set_fps(VENC_CHN chn, uint32_t fps);
 int us_ax_set_gop(VENC_CHN chn, uint32_t gop);
+int us_ax_set_quality(VENC_CHN chn, uint32_t quality);
+int us_ax_set_bitrate(VENC_CHN chn, uint32_t bitrate);
 int us_ax_set_rate_control(us_ax_encoder_s *ax_enc, VENC_CHN chn, AX_VENC_RC_MODE_E rcMode);
 
 int us_ax_get_h264_frame(us_ax_encoder_s *ax_enc, us_frame_s *frame, bool force_key);

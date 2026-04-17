@@ -585,6 +585,58 @@ done:
   return iRet;
 }
 
+int us_ax_set_quality(VENC_CHN chn, uint32_t quality)
+{
+  AX_S32 s32Ret;
+  int iRet;
+  AX_VENC_RC_PARAM_T stRcParam;
+
+  memset(&stRcParam, 0, sizeof(stRcParam));
+  s32Ret = AX_VENC_GetRcParam(chn,&stRcParam);
+  if (s32Ret == 0) {
+    stRcParam.stMjpegFixQp.s32FixedQp = 51 - (uint)(quality * 50) / 100;
+    s32Ret = AX_VENC_SetRcParam(chn,&stRcParam);
+    iRet = 0;
+    if (s32Ret == 0) goto done;
+    AXV_LOGE("AX_VENC_SetRcParam failed, ret=0x%x", s32Ret);
+  }
+  else {
+    AXV_LOGE("AX_VENC_GetRcParam failed, ret=0x%x", s32Ret);
+  }
+  iRet = -1;
+done:
+  return iRet;
+}
+
+int us_ax_set_bitrate(VENC_CHN chn, uint32_t bitrate)
+{
+  AX_S32 s32Ret;
+  int iRet;
+  AX_VENC_RC_PARAM_T stRcParam;
+
+  memset(&stRcParam, 0, sizeof(stRcParam));
+  s32Ret = AX_VENC_GetRcParam(chn,&stRcParam);
+  if (s32Ret == 0) {
+    if ((stRcParam.enRcMode == AX_VENC_RC_MODE_H264CBR) ||
+       (stRcParam.enRcMode == AX_VENC_RC_MODE_H265CBR)) {
+      stRcParam.stH264Cbr.u32BitRate = bitrate;
+      s32Ret = AX_VENC_SetRcParam(chn,&stRcParam);
+      iRet = 0;
+      if (s32Ret == 0) goto done;
+      AXV_LOGE("AX_VENC_SetRcParam failed, ret=0x%x", s32Ret);
+    }
+    else {
+      AXV_LOGE("Unsupported RC mode: %d", stRcParam.enRcMode);
+    }
+  }
+  else {
+    AXV_LOGE("AX_VENC_GetRcParam failed, ret=0x%x", s32Ret);
+  }
+  iRet = -1;
+done:
+  return iRet;
+}
+
 int us_ax_set_rate_control(us_ax_encoder_s *ax_enc, VENC_CHN chn, AX_VENC_RC_MODE_E rcMode)
 {
   AX_S32 s32Ret;
