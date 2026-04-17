@@ -171,8 +171,8 @@ void us_stream_loop(us_stream_s *stream) {
 		}
 		us_ax_encoder_s *ax_enc = us_ax_encoder_init("AX_MULTI", cap->width, cap->height, cap->desired_fps, cap->jpeg_quality, stream->h264_bitrate, stream->h264_gop);
 		if (ax_enc) {
-			cap->run->width = ax_enc->width;
-			cap->run->height = ax_enc->height;
+			cap->run->width = ax_enc->mode.width;
+			cap->run->height = ax_enc->mode.height;
 			cap->run->hw_fps = ax_enc->desired_fps;
 			cap->run->jpeg_quality = ax_enc->quality;
 			run->ax_enc = ax_enc;

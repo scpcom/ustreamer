@@ -129,9 +129,16 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 		goto ErrorHandle;
 	}
 
-	width = ax_enc->width;
-	height = ax_enc->height;
-	fps = ax_enc->fps;
+	if (ax_enc->mode.width == 0 || ax_enc->mode.height == 0 || ax_enc->mode.fps == 0) {
+		us_ax_get_lt_info(&ax_enc->mode);
+	}
+	if (ax_enc->desired_fps == 0) {
+		ax_enc->desired_fps = ax_enc->mode.fps;
+	}
+
+	width = ax_enc->mode.width;
+	height = ax_enc->mode.height;
+	fps = ax_enc->mode.fps;
 	desired_fps = ax_enc->desired_fps;
 	quality = ax_enc->quality;
 	bitrate = ax_enc->bitrate;
@@ -374,9 +381,9 @@ us_ax_encoder_s *us_ax_encoder_init(const char *pdev_name, int width, int height
 	memset(ax_enc->dev_name_, 0, CONFIG_DEVNAME_LEN);
 	memcpy(ax_enc->dev_name_, pdev_name, CopyLen);
 
-	ax_enc->width          = width;
-	ax_enc->height         = height;
-	ax_enc->fps            = fps;
+	ax_enc->mode.width     = width;
+	ax_enc->mode.height    = height;
+	ax_enc->mode.fps       = fps;
 	ax_enc->desired_fps    = fps;
 	ax_enc->quality        = quality;
 	ax_enc->bitrate        = bitrate;
@@ -756,31 +763,31 @@ int us_ax_set_rate_control(us_ax_encoder_s *ax_enc, VENC_CHN chn, AX_VENC_RC_MOD
 
 int us_ax_encoder_check(us_ax_encoder_s *ax_enc, uint32_t width, uint32_t height, uint32_t fps)
 {
-	if (ax_enc->width == width &&
-	    ax_enc->height == height &&
-	    ax_enc->fps == fps) {
+	if (ax_enc->mode.width == width &&
+	    ax_enc->mode.height == height &&
+	    ax_enc->mode.fps == fps) {
 		return 0;
 	}
 
-	ax_enc->width      = width;
-	ax_enc->height     = height;
-	ax_enc->fps        = fps;
+	ax_enc->mode.width  = width;
+	ax_enc->mode.height = height;
+	ax_enc->mode.fps    = fps;
 
-	AXV_LOGI("Using %dx%d %d fps", ax_enc->width, ax_enc->height, ax_enc->fps);
+	AXV_LOGI("Using %dx%d %d fps", ax_enc->mode.width, ax_enc->mode.height, ax_enc->mode.fps);
 
 	if (ax_enc->venc_jpeg_run_) {
-		us_ax_set_resolution(ax_enc->venc_jpeg_chn, ax_enc->width, ax_enc->height);
-		us_ax_set_fps(ax_enc->venc_jpeg_chn, ax_enc->fps);
+		us_ax_set_resolution(ax_enc->venc_jpeg_chn, ax_enc->mode.width, ax_enc->mode.height);
+		us_ax_set_fps(ax_enc->venc_jpeg_chn, ax_enc->mode.fps);
 		us_ax_enable_stream(ax_enc->venc_jpeg_chn);
 	}
 	if (ax_enc->venc_h265_run_) {
-		us_ax_set_resolution(ax_enc->venc_h265_chn, ax_enc->width, ax_enc->height);
-		us_ax_set_fps(ax_enc->venc_h265_chn, ax_enc->fps);
+		us_ax_set_resolution(ax_enc->venc_h265_chn, ax_enc->mode.width, ax_enc->mode.height);
+		us_ax_set_fps(ax_enc->venc_h265_chn, ax_enc->mode.fps);
 		us_ax_enable_stream(ax_enc->venc_h265_chn);
 	}
 	if (ax_enc->venc_h264_run_) {
-		us_ax_set_resolution(ax_enc->venc_h264_chn, ax_enc->width, ax_enc->height);
-		us_ax_set_fps(ax_enc->venc_h264_chn, ax_enc->fps);
+		us_ax_set_resolution(ax_enc->venc_h264_chn, ax_enc->mode.width, ax_enc->mode.height);
+		us_ax_set_fps(ax_enc->venc_h264_chn, ax_enc->mode.fps);
 		us_ax_enable_stream(ax_enc->venc_h264_chn);
 	}
 	return 0;
