@@ -8,6 +8,35 @@
 
 #include "ax_common.h"
 
+static char* file_to_string(const char *file, size_t max_len)
+{
+	char *m_ptr = NULL;
+	size_t m_capacity = 0;
+	FILE* fp = fopen(file, "r");
+
+	if(fp) {
+		m_capacity = max_len;
+		if (m_capacity) {
+			m_ptr = (char*)malloc(m_capacity+1);
+		}
+		if (m_ptr) {
+			fgets(m_ptr, m_capacity, fp);
+			m_ptr[m_capacity] = 0;
+		}
+
+		fclose(fp);
+	}
+
+	if (m_ptr) {
+	        uint8_t j=0;
+	        while (m_ptr[j] != '\0' && m_ptr[j] != '\r' && m_ptr[j] != '\n')
+			j++;
+		m_ptr[j] = 0;
+	}
+
+	return m_ptr;
+}
+
 void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 {
 	int res;
@@ -100,6 +129,21 @@ int us_ax_set_lt_power(uint8_t _en)
 	}
 	else {
 		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+	}
+	return res;
+}
+
+uint8_t us_ax_get_lt_status(const char* compare)
+{
+	int res = 0;
+	char* str;
+	str = file_to_string("/proc/lt6911_info/status", 32);
+	if (str)
+	{
+		if (!strcmp(str, compare)) {
+			res = 1;
+		}
+		free(str);
 	}
 	return res;
 }
