@@ -324,8 +324,10 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	if (ax_enc->venc_h264_run_) {
 		ax_enc->venc_h264_chn = 0;
 		ret = AX_ENC_VENC_Chn_Init(&ax_enc->venc_h264_chn, &ax_enc->stH264VencChnAttr);
-		if (0 != ret)
+		if (0 != ret) {
+			ax_enc->venc_h264_chn = -1;
 			ax_enc->venc_h264_run_ = 0;
+		}
 #if 0
 		pthread_create(&ax_enc->venc_thread_id_, NULL, VencGetStreamProc, NULL);
 #endif
@@ -333,14 +335,18 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	if (ax_enc->venc_h265_run_) {
 		ax_enc->venc_h265_chn = ax_enc->venc_h264_chn + 1;
 		ret = AX_ENC_VENC_Chn_Init(&ax_enc->venc_h265_chn, &ax_enc->stH265VencChnAttr);
-		if (0 != ret)
+		if (0 != ret) {
+			ax_enc->venc_h265_chn = -1;
 			ax_enc->venc_h265_run_ = 0;
+		}
 	}
 	if (ax_enc->venc_jpeg_run_) {
 		ax_enc->venc_jpeg_chn = (ax_enc->venc_h265_run_ ? ax_enc->venc_h265_chn : ax_enc->venc_h264_chn) + 1;
 		ret = AX_ENC_VENC_Chn_Init(&ax_enc->venc_jpeg_chn, &ax_enc->stJPEGVencChnAttr);
-		if (0 != ret)
+		if (0 != ret) {
+			ax_enc->venc_jpeg_chn = -1;
 			ax_enc->venc_jpeg_run_ = 0;
+		}
 	}
 
 	ax_enc->state_ |= AX_ENCODER_HW_ENABLE;
@@ -444,7 +450,9 @@ int us_ax_enable_stream(VENC_CHN VencChn)
 
 int us_ax_disable_stream(VENC_CHN VencChn)
 {
-	AX_S32 s32Ret = AX_VENC_StopRecvFrame(VencChn);
+	AX_S32 s32Ret;
+	if (VencChn == -1) return 0;
+	s32Ret = AX_VENC_StopRecvFrame(VencChn);
 	if (0 != s32Ret) {
 		AXV_LOGE("VencChn %d: AX_VENC_StopRecvFrame failed, s32Ret:0x%x", VencChn, s32Ret);
 		return -1;
