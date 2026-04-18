@@ -369,6 +369,74 @@ done:
   return iRes;
 }
 
+static int kvmv_encoder_check(us_ax_mode_s *mode)
+{
+  kvm_context_s *kvmCtx;
+  us_ax_encoder_s *ax_enc;
+  uint32_t lFPS;
+
+  kvmCtx = kvm_context_get_instance();
+  ax_enc = kvmCtx->ax_enc;
+
+  if (ax_enc == NULL) return -1;
+
+  lFPS = kvmCtx->fps ? kvmCtx->fps : ax_enc->mode.fps;
+  if (ax_enc->mode.width == mode->width &&
+      ax_enc->mode.height == mode->height &&
+      lFPS == mode->fps) {
+    return 0;
+  }
+
+  ax_enc->mode.width  = mode->width;
+  ax_enc->mode.height = mode->height;
+  ax_enc->mode.fps    = mode->fps;
+
+  AXV_LOGI("Using %dx%d %d fps", ax_enc->mode.width, ax_enc->mode.height, ax_enc->mode.fps);
+
+  if (ax_enc->venc_jpeg_run_ && kvmCtx->venc_jpeg_on) {
+    us_ax_set_resolution(ax_enc->venc_jpeg_chn, ax_enc->mode.width, ax_enc->mode.height);
+    us_ax_set_fps(ax_enc->venc_jpeg_chn, ax_enc->mode.fps);
+    us_ax_enable_stream(ax_enc->venc_jpeg_chn);
+  }
+  if (ax_enc->venc_h265_run_ && kvmCtx->venc_h265_on) {
+    us_ax_set_resolution(ax_enc->venc_h265_chn, ax_enc->mode.width, ax_enc->mode.height);
+    us_ax_set_fps(ax_enc->venc_h265_chn, ax_enc->mode.fps);
+    us_ax_enable_stream(ax_enc->venc_h265_chn);
+  }
+  if (ax_enc->venc_h264_run_ && kvmCtx->venc_h264_on) {
+    us_ax_set_resolution(ax_enc->venc_h264_chn, ax_enc->mode.width, ax_enc->mode.height);
+    us_ax_set_fps(ax_enc->venc_h264_chn, ax_enc->mode.fps);
+    us_ax_enable_stream(ax_enc->venc_h264_chn);
+  }
+  return 0;
+}
+
+static int kvmv_check_signal()
+{
+  kvm_context_s *kvmCtx;
+  us_ax_encoder_s *ax_enc;
+  us_ax_mode_s mode;
+  int res = 0;
+
+  kvmCtx = kvm_context_get_instance();
+  ax_enc = kvmCtx->ax_enc;
+  if (ax_enc == NULL) return -1;
+  if (us_ax_get_lt_status("disappear")) {
+    kvmCtx->no_signal = 1;
+    res = -1;
+  }
+  if (res < 0) {
+    return res;
+  }
+  if (kvmCtx->no_signal) {
+    mode = ax_enc->mode;
+    us_ax_get_lt_info(&mode);
+    kvmv_encoder_check(&mode);
+  }
+  kvmCtx->no_signal = 0;
+  return res;
+}
+
 int kvmv_read_img(uint16_t _width,uint16_t _height,uint8_t _type,uint16_t _qlty,
                  uint8_t **_pp_kvm_data,uint32_t *_p_kvmv_data_size)
 {
@@ -472,6 +540,9 @@ get_h264:
     if (_type == 1) {
       iRet = us_ax_get_h264_frame(ax_enc,frame,false);
 set_data:
+      if (iRet < 0) {
+        kvmv_check_signal();
+      }
       if (((iRet < 0 || frame == NULL) || (frame->data == NULL)) ||
          (uDataSize = frame->used, uDataSize == 0)) goto fail;
       *_pp_kvm_data = frame->data;

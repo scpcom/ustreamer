@@ -15,6 +15,7 @@ typedef struct {
 	us_frame_s *frame;
 	uint8_t debug_en;
 	uint32_t deinit;
+	uint8_t no_signal;
 	uint8_t venc_h264_on;
 	uint8_t venc_h265_on;
 	uint8_t venc_jpeg_on;
