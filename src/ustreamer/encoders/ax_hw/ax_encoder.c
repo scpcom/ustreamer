@@ -227,6 +227,9 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 
 	stVencChnAttr.stVencAttr.enMemSource = AX_MEMORY_SOURCE_CMM;
 	stVencChnAttr.stVencAttr.enType = PT_H265;
+	stVencChnAttr.stVencAttr.enProfile = AX_VENC_HEVC_MAIN_PROFILE;
+	stVencChnAttr.stVencAttr.enLevel = AX_VENC_HEVC_LEVEL_5_1;
+	stVencChnAttr.stVencAttr.enTier = AX_VENC_HEVC_MAIN_TIER;
 
 	stVencChnAttr.stVencAttr.u32MaxPicWidth = 3840;
 	stVencChnAttr.stVencAttr.u32MaxPicHeight = 2400;
@@ -277,7 +280,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 
 	ax_enc->stH265VencChnAttr = stVencChnAttr;
 	ax_enc->venc_h265_chn     = -1;
-	ax_enc->venc_h265_run_    = 0;
+	ax_enc->venc_h265_run_    = 1;
 
 	memset(&stVencChnAttr, 0, sizeof(stVencChnAttr));
 
