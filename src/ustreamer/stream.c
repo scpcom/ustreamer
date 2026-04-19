@@ -272,6 +272,9 @@ void us_stream_loop(us_stream_s *stream) {
 #			undef QUEUE_HW
 			us_queue_put(releasers[hw->buf.index].queue, hw, 0); // Plan to release
 
+#ifdef MK_WITH_AX
+			usleep(5 * 1000);
+#endif
 			// Мы не обновляем здесь состояние синков, потому что это происходит внутри обслуживающих их потоков
 			_stream_check_suicide(stream);
 			if (stream->slowdown && !_stream_has_any_clients_cached(stream)) {
@@ -483,6 +486,9 @@ static void *_h264_thread(void *v_ctx) {
 
 		if (!us_memsink_server_check(stream->h264_sink, NULL)) {
 			US_LOG_VERBOSE("H264: Passed encoding because nobody is watching");
+#ifdef MK_WITH_AX
+			usleep(5 * 1000);
+#endif
 			goto decref;
 		}
 #ifndef MK_WITH_AX
@@ -751,6 +757,7 @@ static void _stream_update_captured_fpsi(us_stream_s *stream, const us_frame_s *
 #ifdef MK_WITH_AX
 static void us_ax_stream_update_blank(us_stream_s *stream) {
 	us_stream_runtime_s *run = stream->run;
+	bool slowdown = true;
 	const char *blank_reason = (
 		"< NO SIGNAL DETECTED >\n \n"
 		"   Possible reasons:  \n \n"
@@ -764,8 +771,27 @@ static void us_ax_stream_update_blank(us_stream_s *stream) {
 		width = stream->cap->width;
 		height = stream->cap->height;
 	}
+	if (run->blank->raw && run->blank->raw->used > 0 &&
+	    run->blank->raw->width == width && run->blank->raw->height == height &&
+	    run->blank->ft->text != NULL && !strcmp(run->blank->ft->text, blank_reason)) {
+		goto h264_blank;
+	}
+	slowdown = false;
 	us_blank_draw(run->blank, blank_reason, width, height);
+h264_blank:
+#ifdef WITH_LIBX264
+	if (run->h264_tmp_src && run->h264_tmp_src->used > 0 &&
+	    run->h264_tmp_src->width == width && run->h264_tmp_src->height == height) {
+		goto done;
+	}
+	slowdown = false;
+	us_libx264_encoder_compress(&run->libx264_enc, run->blank->raw, run->h264_tmp_src, true);
+#endif
 
+done:
+	if (slowdown) {
+		usleep(1000 * 1000 / stream->cap->run->hw_fps);
+	}
 	_stream_update_captured_fpsi(stream, run->blank->raw, false);
 }
 #endif
@@ -900,8 +926,8 @@ axv:
 	if  (res < 0) {
 #ifdef WITH_LIBX264
 		us_ax_stream_update_blank(stream);
-		_stream_encode_expose_h264(stream, run->blank->raw, true);
-		return;
+		us_frame_set_data(run->h264_dest, run->h264_tmp_src->data, run->h264_tmp_src->used);
+		res = 4;
 #else
 		goto done;
 #endif
