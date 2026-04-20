@@ -826,6 +826,128 @@ static bool socket_exists(const char *path)
 	return (sb.st_mode & S_IFMT) == S_IFSOCK;
 }
 
+static uint8_t string_match(char *str, char *compare)
+{
+  if (!strcmp(str, compare)) {
+    return 1;
+  }
+  return 0;
+}
+
+void millisleep(uint64_t millisecs)
+{
+  usleep(millisecs * 1000);
+}
+
+int us_ax_capture_check(us_ax_capture_s *ax_cap)
+{
+  int res = 0;
+  uint8_t cRet;
+  bool bRet;
+  us_ax_mode_s mode;
+  char status[32];
+  char new_status[32];
+
+  bRet = us_ax_get_lt_status(status, sizeof(status));
+  if (bRet) {
+          cRet = string_match(status,"stable");
+          if (cRet == 0) {
+            cRet = string_match(status,"disappear");
+            if (cRet == 0) {
+              cRet = string_match(status,"unknown res");
+              if (cRet == 0) {
+                cRet = string_match(status,"error res");
+                if (cRet == 0) {
+                  cRet = string_match(status,"new res");
+                  if (cRet == 0) goto retry;
+                  AXV_LOGI("LT6911 detected new resolution, checking...");
+                  memset(&mode, 0, sizeof(mode));
+                  us_ax_get_lt_info(&mode);
+                  if (((mode.width != 0) && (mode.height != 0)) && (mode.fps != 0)) {
+                    AXV_LOGI("LT6911 resolution changed to %dx%d, fps:%d",
+                                 mode.width, mode.height, mode.fps);
+                    cRet = us_ax_set_lt_status("ok");
+                    if (cRet == 0) {
+                      AXV_LOGE("Failed to write LT6911 status");
+                      goto status_failed;
+                    }
+                    millisleep(200);
+                    bRet = us_ax_get_lt_status(new_status, sizeof(new_status));
+                    if (bRet) {
+                      cRet = string_match(new_status,"stable");
+                      if (cRet == 0) {
+                        AXV_LOGE(
+                                     "LT6911 status is not stable after resolution change: %s",
+                                     new_status);
+                        goto retry;
+                      }
+                      if ((mode.width == ax_cap->mode.width) &&
+                          (mode.height == ax_cap->mode.height) &&
+                          (mode.fps == ax_cap->mode.fps)) {
+                        AXV_LOGI("Resolution already set to %dx%d@%d, skipping",
+                                     mode.width, mode.height, mode.fps);
+                        goto retry;
+                      }
+                      bRet = AX_CAP_SYS_Unlink(ax_cap);
+                      if (!bRet) goto deinit_failed;
+                      bRet = AX_CAP_IVPS_Deinit(ax_cap);
+                      if (!bRet) goto deinit_failed;
+                      bRet = AX_CAP_ISP_StreamOff(ax_cap);
+                      if (!bRet) goto deinit_failed;
+                      ax_cap->mode.width = mode.width;
+                      ax_cap->mode.height = mode.height;
+                      ax_cap->mode.fps = mode.fps;
+                      bRet = AX_CAP_ISP_StreamOn(ax_cap);
+                      if (!bRet) goto init_failed;
+                      bRet = AX_CAP_IVPS_Init(ax_cap);
+                      if (!bRet) goto init_failed;
+                      bRet = AX_CAP_SYS_Link(ax_cap);
+                      if (!bRet) goto init_failed;
+
+                      AXV_LOGI("LT6911 resolution reset");
+                    }
+                    else {
+                      AXV_LOGE("Failed to verify status after handshake");
+                    }
+                    goto retry;
+                  }
+                  AXV_LOGE("Failed to read LT6911 resolution: %dx%d@%d",
+                               mode.width, mode.height, mode.fps);
+                  goto status_failed;
+                }
+              }
+              AXV_LOGE("Failed to read Lt6911 status: %s, resetting LT6911",
+                           status);
+              us_ax_set_lt_power(0);
+              millisleep(500);
+              us_ax_set_lt_power(1);
+              goto retry;
+            }
+            AXV_LOGE("LT6911 status is disappear, waiting...");
+          }
+          else {
+            AXV_LOGD("LT6911 status is stable");
+          }
+  }
+  goto done;
+
+deinit_failed:
+  AXV_LOGE("axera deinit failed");
+  goto retry;
+
+init_failed:
+  AXV_LOGE("axera init failed");
+  goto retry;
+
+status_failed:
+
+retry:
+  res = -1;
+
+done:
+  return res;
+}
+
 us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 {
 	bool res;
@@ -897,15 +1019,19 @@ int us_ax_capture_open(us_ax_capture_s *ax_cap)
 {
 	int res = 0;
 	if (ax_cap == NULL) return -1;
-	if (us_ax_get_lt_status("disappear")) {
+	if (us_ax_is_lt_status("disappear")) {
 		ax_cap->no_signal = 1;
 		res = -1;
 	}
 	if (res < 0) {
 		return res;
 	}
-	if (ax_cap->no_signal) {
-		us_ax_get_lt_info(&ax_cap->mode);
+	if (ax_cap->no_signal || us_ax_is_lt_status("new res")) {
+		if (ax_cap->cap_run) {
+			us_ax_capture_check(ax_cap);
+		} else {
+			us_ax_get_lt_info(&ax_cap->mode);
+		}
 	}
 	ax_cap->no_signal = 0;
 	return res;

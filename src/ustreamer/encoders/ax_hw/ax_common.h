@@ -25,7 +25,9 @@ typedef struct {
 
 void us_ax_get_lt_info(us_ax_mode_s *ax_mode);
 int us_ax_set_lt_power(uint8_t _en);
-uint8_t us_ax_get_lt_status(const char* compare);
+uint8_t us_ax_is_lt_status(const char* compare);
+uint8_t us_ax_get_lt_status(char *value, size_t max_len);
+uint8_t us_ax_set_lt_status(char *value);
 
 #if __cplusplus
 }

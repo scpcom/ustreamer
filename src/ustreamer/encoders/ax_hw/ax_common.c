@@ -133,9 +133,9 @@ int us_ax_set_lt_power(uint8_t _en)
 	return res;
 }
 
-uint8_t us_ax_get_lt_status(const char* compare)
+uint8_t us_ax_is_lt_status(const char* compare)
 {
-	int res = 0;
+	uint8_t res = 0;
 	char* str;
 	str = file_to_string("/proc/lt6911_info/status", 32);
 	if (str)
@@ -145,5 +145,47 @@ uint8_t us_ax_get_lt_status(const char* compare)
 		}
 		free(str);
 	}
+	return res;
+}
+
+uint8_t us_ax_get_lt_status(char *value, size_t max_len)
+{
+	uint8_t res = 0;
+	char* str;
+	str = file_to_string("/proc/lt6911_info/status", max_len);
+	if (str)
+	{
+		strncpy(value, str, max_len);
+		res = 1;
+		free(str);
+	}
+	return res;
+}
+
+uint8_t us_ax_set_lt_status(char *value)
+{
+	size_t res = 0;
+	size_t count;
+	FILE *pFile;
+
+	if (value == NULL) return 0;
+	count = strlen(value);
+
+	pFile = fopen("/proc/lt6911_info/status","w");
+	if (pFile != NULL) {
+		res = fwrite(value, 1, count, pFile);
+		if (res != count) {
+			AXV_LOGE("Failed to write status");
+			res = 0;
+		}
+		else {
+			res = 1;
+		}
+		fclose(pFile);
+	}
+	else {
+		AXV_LOGE("Failed to open status file");
+	}
+
 	return res;
 }

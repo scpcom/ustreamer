@@ -421,7 +421,7 @@ static int kvmv_check_signal()
   kvmCtx = kvm_context_get_instance();
   ax_enc = kvmCtx->ax_enc;
   if (ax_enc == NULL) return -1;
-  if (us_ax_get_lt_status("disappear")) {
+  if (us_ax_is_lt_status("disappear")) {
     kvmCtx->no_signal = 1;
     res = -1;
   }
