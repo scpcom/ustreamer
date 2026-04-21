@@ -37,7 +37,7 @@ static char* file_to_string(const char *file, size_t max_len)
 	return m_ptr;
 }
 
-void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
+void us_ax_get_lt_info(us_ax_mode_s *ax_mode, bool use_default)
 {
 	int res;
 	uint32_t width = 0;
@@ -78,15 +78,17 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 		ax_mode->width = width;
 		ax_mode->height = height;
 	}
-	else {
+	else if (use_default)  {
 		ax_mode->width = 1920;
 		ax_mode->height = 1080;
 		AXV_LOGE("Width or height is 0, use default values");
 	}
 	pFile = fopen(LT_INFO_PATH("/fps"),"r");
 	if (pFile == NULL) {
-		fps = 60;
-		AXV_LOGE("Failed to open fps file, set fps to 60");
+		if (use_default)  {
+			fps = 60;
+			AXV_LOGE("Failed to open fps file, set fps to 60");
+		}
 	}
 	else {
 		res = fscanf(pFile,"%d",&fps);
@@ -95,13 +97,17 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 			AXV_LOGE("Failed to read fps, use default");
 		}
 		fclose(pFile);
-		if (fps == 0) {
+		if (fps == 0 && use_default) {
 			AXV_LOGE("Invalid fps value (%d), set fps to 30", fps);
 			fps = 30;
 		}
 	}
-	ax_mode->fps = fps;
-	AXV_LOGI("Using %dx%d %d fps", ax_mode->width, ax_mode->height, ax_mode->fps);
+	if (fps != 0) {
+		ax_mode->fps = fps;
+	}
+	if (width != 0 && height != 0 && fps != 0) {
+		AXV_LOGI("Using %dx%d %d fps", ax_mode->width, ax_mode->height, ax_mode->fps);
+	}
 }
 
 int us_ax_set_lt_power(uint8_t _en)

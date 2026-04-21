@@ -130,7 +130,7 @@ int us_ax_encoder_init_from(us_ax_encoder_s *ax_enc)
 	}
 
 	if (ax_enc->mode.width == 0 || ax_enc->mode.height == 0 || ax_enc->mode.fps == 0) {
-		us_ax_get_lt_info(&ax_enc->mode);
+		us_ax_get_lt_info(&ax_enc->mode, true);
 	}
 	if (ax_enc->desired_fps == 0) {
 		ax_enc->desired_fps = ax_enc->mode.fps;

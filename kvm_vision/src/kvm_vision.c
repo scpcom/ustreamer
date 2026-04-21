@@ -430,7 +430,7 @@ static int kvmv_check_signal()
   }
   if (kvmCtx->no_signal) {
     mode = ax_enc->mode;
-    us_ax_get_lt_info(&mode);
+    us_ax_get_lt_info(&mode, true);
     kvmv_encoder_check(&mode);
   }
   kvmCtx->no_signal = 0;

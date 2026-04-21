@@ -862,7 +862,7 @@ int us_ax_capture_check(us_ax_capture_s *ax_cap)
                   if (cRet == 0) goto retry;
                   AXV_LOGI("LT6911 detected new resolution, checking...");
                   memset(&mode, 0, sizeof(mode));
-                  us_ax_get_lt_info(&mode);
+                  us_ax_get_lt_info(&mode, false);
                   if (((mode.width != 0) && (mode.height != 0)) && (mode.fps != 0)) {
                     AXV_LOGI("LT6911 resolution changed to %dx%d, fps:%d",
                                  mode.width, mode.height, mode.fps);
@@ -976,7 +976,7 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 		i += 1;
 	}
 
-	us_ax_get_lt_info(&ax_cap->mode);
+	us_ax_get_lt_info(&ax_cap->mode, true);
 
 	if (socket_exists("/run/kvm/vin_sock")) {
 		ax_cap->kvm_vin = 1;
@@ -1030,7 +1030,7 @@ int us_ax_capture_open(us_ax_capture_s *ax_cap)
 		if (ax_cap->cap_run) {
 			us_ax_capture_check(ax_cap);
 		} else {
-			us_ax_get_lt_info(&ax_cap->mode);
+			us_ax_get_lt_info(&ax_cap->mode, true);
 		}
 	}
 	ax_cap->no_signal = 0;
