@@ -43,10 +43,10 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 	uint32_t width = 0;
 	uint32_t height = 0;
 	uint32_t fps = 0;
-	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	FILE *pFile = fopen(LT_INFO_PATH("/status"),"r");
 	if (pFile != NULL) {
 		fclose(pFile);
-		pFile = fopen("/proc/lt6911_info/width","r");
+		pFile = fopen(LT_INFO_PATH("/width"),"r");
 		if (pFile != NULL) {
 			res = fscanf(pFile,"%d",&width);
 			if (res != 1) {
@@ -58,7 +58,7 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 		else {
 			AXV_LOGE("Failed to open width file, use default");
 		}
-		pFile = fopen("/proc/lt6911_info/height","r");
+		pFile = fopen(LT_INFO_PATH("/height"),"r");
 		if (pFile != NULL) {
 			res = fscanf(pFile,"%d",&height);
 			if (res != 1) {
@@ -72,7 +72,7 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 		}
 	}
 	else {
-		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+		AXV_LOGE("Failed to open %s", LT_INFO_PATH("/status"));
 	}
 	if (width != 0 && height != 0) {
 		ax_mode->width = width;
@@ -83,7 +83,7 @@ void us_ax_get_lt_info(us_ax_mode_s *ax_mode)
 		ax_mode->height = 1080;
 		AXV_LOGE("Width or height is 0, use default values");
 	}
-	pFile = fopen("/proc/lt6911_info/fps","r");
+	pFile = fopen(LT_INFO_PATH("/fps"),"r");
 	if (pFile == NULL) {
 		fps = 60;
 		AXV_LOGE("Failed to open fps file, set fps to 60");
@@ -108,11 +108,11 @@ int us_ax_set_lt_power(uint8_t _en)
 {
 	int res = 0;
 	char value = _en ? '1' : '0';
-	FILE *pFile = fopen("/proc/lt6911_info/status","r");
+	FILE *pFile = fopen(LT_INFO_PATH("/status"),"r");
 	if (pFile != NULL) {
 		fclose(pFile);
 		res = -1;
-		pFile = fopen("/proc/lt6911_info/power","w");
+		pFile = fopen(LT_INFO_PATH("/power"),"w");
 		if (pFile != NULL) {
 			res = fwrite(&value, 1, 1, pFile);
 			if (res != 1) {
@@ -128,7 +128,7 @@ int us_ax_set_lt_power(uint8_t _en)
 		}
 	}
 	else {
-		AXV_LOGE("Failed to open /proc/lt6911_info/status");
+		AXV_LOGE("Failed to open %s", LT_INFO_PATH("/status"));
 	}
 	return res;
 }
@@ -137,7 +137,7 @@ uint8_t us_ax_is_lt_status(const char* compare)
 {
 	uint8_t res = 0;
 	char* str;
-	str = file_to_string("/proc/lt6911_info/status", 32);
+	str = file_to_string(LT_INFO_PATH("/status"), 32);
 	if (str)
 	{
 		if (!strcmp(str, compare)) {
@@ -152,7 +152,7 @@ uint8_t us_ax_get_lt_status(char *value, size_t max_len)
 {
 	uint8_t res = 0;
 	char* str;
-	str = file_to_string("/proc/lt6911_info/status", max_len);
+	str = file_to_string(LT_INFO_PATH("/status"), max_len);
 	if (str)
 	{
 		strncpy(value, str, max_len);
@@ -171,7 +171,7 @@ uint8_t us_ax_set_lt_status(char *value)
 	if (value == NULL) return 0;
 	count = strlen(value);
 
-	pFile = fopen("/proc/lt6911_info/status","w");
+	pFile = fopen(LT_INFO_PATH("/status"),"w");
 	if (pFile != NULL) {
 		res = fwrite(value, 1, count, pFile);
 		if (res != count) {

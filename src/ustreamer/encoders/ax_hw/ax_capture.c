@@ -965,7 +965,7 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 	ax_cap->mode.fps    = fps;
 
 	i = 0;
-	while (!file_exists("/proc/lt6911_info/status") && i < 5) {
+	while (!file_exists(LT_INFO_PATH("/status")) && i < 5) {
 		sleep(1);
 		i += 1;
 	}

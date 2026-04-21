@@ -10,6 +10,8 @@
 #define AXV_LOGW(x_msg, ...)	US_LOG_INFO("AX: " x_msg, ##__VA_ARGS__)
 #define AXV_LOGE(x_msg, ...)	US_LOG_ERROR("AX: " x_msg, ##__VA_ARGS__)
 
+#define LT_INFO_PATH(s) "/proc/lt6911_info" s
+
 #define VIN_SOCKET_DIR "/run/kvm"
 #define VIN_SOCKET_PATH VIN_SOCKET_DIR "/vin_sock"
 
