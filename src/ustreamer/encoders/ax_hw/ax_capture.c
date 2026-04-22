@@ -610,9 +610,9 @@ static bool AX_CAP_IVPS_Init(us_ax_capture_s *ax_cap)
       stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)ax_cap->mode.height;
       stPipelineAttr.tFilter[0][0].nDstPicStride =
            (stPipelineAttr.tFilter[0][0].nDstPicWidth + 0xf) & 0xfff0;
-      stPipelineAttr.tFilter[1][1].nDstPicWidth = 0x140;
-      stPipelineAttr.tFilter[1][1].nDstPicHeight = 0xac;
-      stPipelineAttr.tFilter[1][1].nDstPicStride = 0x140;
+      stPipelineAttr.tFilter[1][1].nDstPicWidth = ax_cap->ivps_mode.width;
+      stPipelineAttr.tFilter[1][1].nDstPicHeight = ax_cap->ivps_mode.height;
+      stPipelineAttr.tFilter[1][1].nDstPicStride = stPipelineAttr.tFilter[1][1].nDstPicWidth;
       stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate = (AX_F32)(int)ax_cap->mode.fps;
       stPipelineAttr.tFilter[1][1].eDstPicFormat = AX_FORMAT_RGB565;
       stPipelineAttr.nOutChnNum = '\x01';
@@ -963,6 +963,10 @@ us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps)
 	ax_cap->mode.width  = width;
 	ax_cap->mode.height = height;
 	ax_cap->mode.fps    = fps;
+
+	ax_cap->ivps_mode.width  = 320;
+	ax_cap->ivps_mode.height = 172;
+	ax_cap->ivps_mode.fps    = 0;   // unused
 
 	i = 0;
 	while (!file_exists(LT_INFO_PATH("/status")) && i < 5) {

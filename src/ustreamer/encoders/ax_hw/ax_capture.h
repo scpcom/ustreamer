@@ -18,6 +18,7 @@ typedef struct {
 	IVPS_GRP ivps_grp;
 	void *libsns_handler;
 	us_ax_mode_s mode;
+	us_ax_mode_s ivps_mode;
 } us_ax_capture_s;
 
 us_ax_capture_s *us_ax_capture_init(int width, int height, uint32_t fps);
