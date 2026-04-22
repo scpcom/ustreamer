@@ -1096,3 +1096,53 @@ int us_ax_get_yuv_frame(us_ax_capture_s *ax_cap, us_frame_s *frame)
   AX_VIN_ReleaseYuvFrame((AX_U8)ax_cap->vin_chn,AX_VIN_CHN_ID_MAIN,&capture_img_info);
   return -1;
 }
+
+int us_ax_get_rgb_frame(us_ax_capture_s *ax_cap, us_frame_s *frame)
+{
+  AX_S32 timeout = 25;
+  AX_U32 size;
+  AX_VOID *pviraddr;
+  AX_S32 s32Ret;
+  AX_VIDEO_FRAME_T video_frame;
+
+  if (ax_cap == NULL) return -1;
+  if (!ax_cap->cap_run)
+	return -1;
+  memset(&video_frame, 0, sizeof(video_frame));
+  s32Ret = AX_IVPS_GetChnFrame((AX_U8)ax_cap->ivps_grp,0,&video_frame,timeout);
+  if (s32Ret != 0) {
+    AXV_LOGE("AX_IVPS_GetChnFrame failed, ret=0x%x", s32Ret);
+    return -1;
+  }
+  AXV_LOGD(
+               "Got RGB565 frame: SeqNum=%lld, FrameSize=%d, Width=%d, Height=%d, Stride=%d, Format=0x%.2x",
+               video_frame.u64SeqNum,
+               video_frame.u32FrameSize,
+               video_frame.u32Width,
+               video_frame.u32Height,
+               video_frame.u32PicStride[0],
+               video_frame.enImgFormat);
+  {
+    size = video_frame.u32PicStride[0] *
+           video_frame.u32Height * 2;
+    pviraddr = AX_SYS_Mmap(video_frame.u64PhyAddr[0],size);
+    if (pviraddr != NULL) {
+      AXV_LOGD(
+                   "AX_SYS_Mmap success: PhyAddr=0x%.16llx, VirtAddr=0x%.8llx, size=%d",
+                   (AX_U64)video_frame.u64PhyAddr[0],
+                   (AX_U64)pviraddr, size);
+      us_frame_set_data(frame, pviraddr, size);
+      s32Ret = AX_SYS_Munmap(pviraddr,size);
+      if (s32Ret != 0) {
+        AXV_LOGE("AX_SYS_Munmap failed for addr=0x%.16llx, ret=0x%x",
+                     video_frame.u64PhyAddr[0], s32Ret);
+      }
+      AX_IVPS_ReleaseChnFrame((AX_U8)ax_cap->ivps_grp,0,&video_frame);
+      return 0;
+    }
+    AXV_LOGE("AX_SYS_Mmap failed for RGB565 frame, addr=0x%.16llx, size=%d",
+                 video_frame.u64PhyAddr[0], size);
+  }
+  AX_IVPS_ReleaseChnFrame((AX_U8)ax_cap->ivps_grp,0,&video_frame);
+  return -1;
+}

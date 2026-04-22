@@ -28,6 +28,7 @@ int us_ax_capture_open(us_ax_capture_s *ax_cap);
 int us_ax_capture_close(us_ax_capture_s *ax_cap);
 
 int us_ax_get_yuv_frame(us_ax_capture_s *ax_cap, us_frame_s *frame);
+int us_ax_get_rgb_frame(us_ax_capture_s *ax_cap, us_frame_s *frame);
 
 #if __cplusplus
 }
