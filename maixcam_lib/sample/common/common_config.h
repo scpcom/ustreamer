@@ -1022,4 +1022,79 @@ AX_VIN_CHN_ATTR_T gSc200aiChn0Attr = {
     .tFrameRateCtrl = {AX_INVALID_FRMRATE, AX_INVALID_FRMRATE},
 };
 
+#define G_LT6911_WIDTH 1920
+#define G_LT6911_HEIGHT 1080
+#define G_LT6911_FPS 60.0
+
+AX_MIPI_RX_ATTR_T gLt6911MipiAttr = {
+    .ePhyMode = AX_MIPI_PHY_TYPE_DPHY,
+    .eLaneNum = AX_MIPI_DATA_LANE_4,
+    .nDataRate =  600,
+    .nDataLaneMap = {0, 1, 3, 4},
+    .nClkLane = {2, 5},
+};
+
+AX_SNS_ATTR_T gLt6911SnsAttr = {
+    .nWidth = G_LT6911_WIDTH,
+    .nHeight = G_LT6911_HEIGHT,
+    .fFrameRate = G_LT6911_FPS,
+    .eSnsMode = AX_SNS_LINEAR_ONLY_MODE,
+    .eRawType = AX_RT_RAW16,
+    .eBayerPattern = AX_BP_BGGR,
+    .bTestPatternEnable = AX_FALSE,
+};
+
+AX_SNS_CLK_ATTR_T gLt6911SnsClkAttr = {
+    .nSnsClkIdx = 0,
+    .eSnsClkRate = AX_SNS_CLK_NOT_CFG,
+};
+
+AX_VIN_DEV_ATTR_T gLt6911DevAttr = {
+    .eDevMode = AX_VIN_DEV_ONLINE,
+    .bImgDataEnable = AX_TRUE,
+    .bNonImgDataEnable = AX_FALSE,
+    .eSnsIntfType = AX_SNS_INTF_TYPE_MIPI_RAW,
+
+    .eSnsMode = AX_SNS_LINEAR_ONLY_MODE,
+    .eBayerPattern = AX_BP_BGGR,
+    .ePixelFmt = AX_FORMAT_BAYER_RAW_16BPP,
+
+    .tDevImgRgn = {
+        {0, 0, G_LT6911_WIDTH, G_LT6911_HEIGHT},
+        {0, 0, G_LT6911_WIDTH, G_LT6911_HEIGHT},
+        {0, 0, G_LT6911_WIDTH, G_LT6911_HEIGHT},
+        {0, 0, G_LT6911_WIDTH, G_LT6911_HEIGHT},
+    },
+
+    .eSnsOutputMode = AX_SNS_NORMAL,
+    .tFrameRateCtrl = {1.0, 1.0},
+    .tCompressInfo = {AX_COMPRESS_MODE_NONE, 0},
+
+    .tMipiIntfAttr = {
+        .szImgDt = {0x1e, 0, 0, 0},
+    },
+};
+
+AX_VIN_PIPE_ATTR_T gLt6911PipeAttr = {
+    .ePipeWorkMode = AX_VIN_PIPE_ISP_BYPASS_MODE,
+    .tPipeImgRgn = {0, 0, G_LT6911_WIDTH, G_LT6911_HEIGHT},
+    .nWidthStride = G_LT6911_WIDTH,
+    .eBayerPattern = AX_BP_BGGR,
+    .ePixelFmt =  AX_FORMAT_BAYER_RAW_16BPP,
+    .eSnsMode = AX_SNS_LINEAR_ONLY_MODE,
+    .tCompressInfo = {AX_COMPRESS_MODE_NONE, 0},
+    .tNrAttr = {{(AX_BOOL)0, {AX_COMPRESS_MODE_NONE, 0}}, {(AX_BOOL)0, {AX_COMPRESS_MODE_NONE, 0}}},
+    .tFrameRateCtrl = {AX_INVALID_FRMRATE, AX_INVALID_FRMRATE},
+};
+
+AX_VIN_CHN_ATTR_T gLt6911Chn0Attr = {
+    .nWidth = G_LT6911_WIDTH,
+    .nHeight = G_LT6911_HEIGHT,
+    .nWidthStride = G_LT6911_WIDTH,
+    .eImgFormat = AX_FORMAT_YUV420_SEMIPLANAR,
+    .nDepth = 1,
+    .tCompressInfo = {AX_COMPRESS_MODE_NONE, 0},
+    .tFrameRateCtrl = {AX_INVALID_FRMRATE, AX_INVALID_FRMRATE},
+};
+
 #endif //_COMMON_CONFIG_H__

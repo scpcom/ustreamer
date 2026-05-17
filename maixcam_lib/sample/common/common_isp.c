@@ -59,6 +59,7 @@ const static AX_SENSOR_LIB_TAB s_libSensorTab[] = {
     {SAMPLE_SNS_BT656,              "libsns_dummy.so",          "gSnsdummyObj"},
     {SAMSUNG_S5KJN1SQ03,            "libsns_s5kjn1sq03.so",     "gSnss5kjn1sq03Obj"},
     {SAMPLE_SNS_BT1120,             "libsns_dummy.so",          "gSnsdummyObj"},
+    {SAMPLE_SNS_LT6911,             "libsns_dummy.so",          "gSnsdummyObj"},
     {SAMPLE_SNS_TYPE_BUTT,          "NULL",                     "NULL"},
 };
 #endif

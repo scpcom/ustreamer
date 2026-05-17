@@ -75,6 +75,14 @@ AX_S32 COMMON_VIN_GetSnsConfig(SAMPLE_SNS_TYPE_E eSnsType,
         memcpy(pPipeAttr, &gBT1120PipeAttr, sizeof(AX_VIN_PIPE_ATTR_T));
         memcpy(&pChnAttr[0], &gBT1120Chn0Attr, sizeof(AX_VIN_CHN_ATTR_T));
         break;
+   case SAMPLE_SNS_LT6911:
+        memcpy(ptMipiAttr, &gLt6911MipiAttr, sizeof(AX_MIPI_RX_ATTR_T));
+        memcpy(ptSnsAttr, &gLt6911SnsAttr, sizeof(AX_SNS_ATTR_T));
+        memcpy(ptSnsClkAttr, &gLt6911SnsClkAttr, sizeof(AX_SNS_CLK_ATTR_T));
+        memcpy(pDevAttr, &gLt6911DevAttr, sizeof(AX_VIN_DEV_ATTR_T));
+        memcpy(pPipeAttr, &gLt6911PipeAttr, sizeof(AX_VIN_PIPE_ATTR_T));
+        memcpy(&pChnAttr[0], &gLt6911Chn0Attr, sizeof(AX_VIN_CHN_ATTR_T));
+        break;
     case SAMPLE_SNS_LVDS:
         memcpy(ptSnsAttr, &gLvdsSnsAttr, sizeof(AX_SNS_ATTR_T));
         memcpy(ptSnsClkAttr, &gLvdsSnsClkAttr, sizeof(AX_SNS_CLK_ATTR_T));

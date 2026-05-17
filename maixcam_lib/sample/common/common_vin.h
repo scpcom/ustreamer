@@ -48,6 +48,8 @@ typedef enum {
     SAMPLE_SNS_BT1120 = 57,
     /* lvds sensor */
     SAMPLE_SNS_LVDS = 60,
+    /* lt sensor */
+    SAMPLE_SNS_LT6911 = 70,
 
     /* dummy sensor */
     SAMPLE_SNS_DUMMY = 100,
