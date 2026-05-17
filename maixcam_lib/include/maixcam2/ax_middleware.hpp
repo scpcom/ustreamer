@@ -513,6 +513,7 @@ namespace maix::middleware::maixcam2 {
         SAMPLE_VIN_SINGLE_SC450AI = 2,
         SAMPLE_VIN_SINGLE_SC850SL = 3,
         SAMPLE_VIN_SINGLE_OS04D10 = 4,
+        SAMPLE_VIN_SINGLE_LT6911 = 5,
         SAMPLE_VIN_BUTT
     } SAMPLE_VIN_CASE_E;
 
@@ -587,6 +588,16 @@ namespace maix::middleware::maixcam2 {
 
     static COMMON_SYS_POOL_CFG_T gtPrivatePoolSingleSc850slSdr[] = {
         {3840, 2160, 3840, AX_FORMAT_BAYER_RAW_10BPP_PACKED, 5, AX_COMPRESS_MODE_NONE, 4},      /* vin raw10 use */
+    };
+
+    // LT6911
+    static COMMON_SYS_POOL_CFG_T gtSysCommPoolSingleLt6911Sdr[] = {
+        {3840, 2400, 3840, AX_FORMAT_BAYER_RAW_16BPP, 6, AX_COMPRESS_MODE_NONE, 0},    /* vin nv21/nv21 use */
+        {3840, 2400, 3840, AX_FORMAT_YUV420_SEMIPLANAR, 6, AX_COMPRESS_MODE_NONE, 0},
+    };
+
+    static COMMON_SYS_POOL_CFG_T gtPrivatePoolSingleLt6911Sdr[] = {
+        {3840, 2400, 3840, AX_FORMAT_BAYER_RAW_16BPP, 8, AX_COMPRESS_MODE_NONE, 0},      /* vin raw16 use */
     };
     // static AX_CAMERA_T gCams[MAX_CAMERAS] = {0};
 
@@ -987,6 +998,19 @@ namespace maix::middleware::maixcam2 {
             /* cams config */
             __sample_case_single_sc850sl(pCamList, eSnsType, pVinParam, pCommonArgs);
             break;
+        case SAMPLE_VIN_SINGLE_LT6911:
+            eSnsType = SAMPLE_SNS_LT6911;
+            /* pool config */
+            pCommonArgs->nPoolCfgCnt = sizeof(gtSysCommPoolSingleLt6911Sdr) / sizeof(gtSysCommPoolSingleLt6911Sdr[0]);
+            pCommonArgs->pPoolCfg = gtSysCommPoolSingleLt6911Sdr;
+
+            /* private pool config */
+            pPrivArgs->nPoolCfgCnt = sizeof(gtPrivatePoolSingleLt6911Sdr) / sizeof(gtPrivatePoolSingleLt6911Sdr[0]);
+            pPrivArgs->pPoolCfg = gtPrivatePoolSingleLt6911Sdr;
+
+            /* cams config */
+            __sample_case_single_dummy(pCamList, eSnsType, pVinParam, pCommonArgs);
+            break;
         default:
             eSnsType = SAMPLE_SNS_DUMMY;
             /* pool config */
@@ -1014,6 +1038,8 @@ namespace maix::middleware::maixcam2 {
             return SAMPLE_VIN_SINGLE_SC850SL;
         } else if (strcmp(sensor_name, "os04d10") == 0) {
             return SAMPLE_VIN_SINGLE_OS04D10;
+        } else if (strcmp(sensor_name, "lt6911") == 0) {
+            return SAMPLE_VIN_SINGLE_LT6911;
         } else {
             log::error("Can't find sensor %s", sensor_name);
             return SAMPLE_VIN_NONE;
@@ -1128,6 +1154,9 @@ namespace maix::middleware::maixcam2 {
                 default:
                     break;
             }
+        }
+        if (fs::exists("/proc/lt6911_info/status")) {
+            return {true, "lt6911"};
         }
 
         // AX_ISP_CloseSnsClk(0);

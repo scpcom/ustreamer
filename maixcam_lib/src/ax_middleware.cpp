@@ -228,6 +228,72 @@ AX_S32 __ax_ivps_csc_tdp
 
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static bool LT6911_HDMI_Enable()
+{
+  uint uAddr;
+  bool bRet;
+  int __fd;
+  int *pError;
+  void *__addr;
+  uint *pData;
+  long lCntr;
+  ulong __offset;
+  char *sError;
+  uint32_t pin_data[22] = {
+    0x0230000C, 0x00020043,
+    0x02300018, 0x00040003,
+    0x02300024, 0x00000003,
+    0x02300030, 0x00040003,
+    0x0230003C, 0x00040003,
+    0x02300048, 0x00060003,
+    0x02300054, 0x00060003,
+    0x02300060, 0x00060003,
+    0x0230006C, 0x00030083,
+    0x02300078, 0x00030083,
+    0x02300084, 0x00040003,
+  };
+
+  __fd = open("/dev/mem",0x101002);
+  if (__fd < 0) {
+    pError = __errno_location();
+    sError = strerror(*pError);
+    printf("Failed to open /dev/mem, error: %s\n", sError);
+    bRet = false;
+  }
+  else {
+    pData = &pin_data[0];
+    lCntr = 0xc;
+    while (lCntr = lCntr + -1, lCntr != 0) {
+      uAddr = *pData;
+      __offset = (ulong)uAddr & 0xfffff000;
+      __addr = mmap((void *)0x0,0x1000,3,1,__fd,__offset);
+      if (__addr == (void *)0xffffffffffffffff) {
+        pError = __errno_location();
+        sError = strerror(*pError);
+        printf("mmap failed for address 0x%x, error: %s\n", *pData, sError);
+      }
+      else {
+        *(uint *)((long)__addr + (uAddr - __offset)) = pData[1];
+        munmap(__addr,0x1000);
+      }
+      pData = pData + 2;
+    }
+    close(__fd);
+    bRet = true;
+  }
+  return bRet;
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+
+
 // Frame::Frame(int, int, axVIDEO_FRAME_T*,
 // frame_from_e, AX_IMG_FORMAT_E)
 
@@ -1344,6 +1410,9 @@ done:
             pcError = "COMMON_VIN_StartMipi failed, r-et=0x%x.\n";
             goto isp_snsclk_failed;
           }
+          if (viMod->cams[0].eSnsType == SAMPLE_SNS_LT6911) {
+            LT6911_HDMI_Enable();
+          }
           s32Ret = COMMON_VIN_CreateDev
                              (stCam.nDevId,(AX_U8)stCam.nRxDev,&stCam.tDevAttr,&stCam.tDevBindPipe);
           if (s32Ret == 0) {
@@ -1824,6 +1893,12 @@ no_fit:
       }
       uCurIvpsChn = 0;
       (viMod->stPipelineAttr).nOutFifoDepth[ch] = 1;
+      if (FilterChn == 1 && viMod->cams[0].eSnsType == SAMPLE_SNS_LT6911) {
+        (viMod->stPipelineAttr).tFilter[0][0].bEngage = AX_FALSE;
+
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].eEngine = AX_IVPS_ENGINE_SCL;
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].eSclType = AX_IVPS_SCL_TYPE_AUTO;
+      }
       uVar8 = AX_IVPS_SetPipelineAttr(IvpsGrp,&viMod->stPipelineAttr);
       if (uVar8 == 0) {
         do {
