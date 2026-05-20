@@ -11,10 +11,9 @@
 namespace maix::middleware::maixcam2
 {
 
-// __sample_fb_config(unsigned int, axSAMPLE_FB_CONFIG_S*) [clone
-// .constprop.0]
+// __sample_fb_config(unsigned int, axSAMPLE_FB_CONFIG_S*)
 
-int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
+err::Err __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig)
 
 {
   int __fd;
@@ -33,7 +32,7 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
   AX_U32 fbFmt;
   AX_U32 fbHeight;
   AX_U32 fbWidth;
-  uint fbindex;
+  uint32_t fbindex;
 
   stColorKey.nKeyLow = pstFbConfig->u32ColorKey;
   fbHeight = pstFbConfig->u32ResoH;
@@ -42,7 +41,7 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
   fbWidth = pstFbConfig->u32ResoW;
   stColorKey.bEnable = (AX_BOOL)pstFbConfig->u32ColorKeyEn;
   stColorKey.bInv = (AX_BOOL)pstFbConfig->u32ColorKeyInv;
-  if (fbFmt == 0xc6) {
+  if (fbFmt == AX_FORMAT_ARGB1555) {
     transp_length = 1;
     transp_offset = 15;
     red_length = 5;
@@ -56,12 +55,12 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
   }
   stColorKey.nKeyHigh = stColorKey.nKeyLow;
   snprintf(caFbDevPath,sizeof(caFbDevPath),"/dev/fb%d",fbindex);
-  __fd = open(caFbDevPath,2);
+  __fd = open(caFbDevPath,O_RDWR);
   if (__fd < 0) {
     piError = __errno_location();
     pcError = strerror(*piError);
     maix::log::error("open %s failed, err:%s\n",caFbDevPath,pcError);
-    return 0xd;
+    return err::ERR_RUNTIME;
   }
   iRet = ioctl(__fd,FBIOGET_VSCREENINFO,&stFbVarInfo);
   if (iRet < 0) {
@@ -69,7 +68,7 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
   }
   else {
     stFbVarInfo.bits_per_pixel = 16;
-    if (fbFmt != 0xc6) {
+    if (fbFmt != AX_FORMAT_ARGB1555) {
       stFbVarInfo.bits_per_pixel = 32;
     }
     stFbVarInfo.yres_virtual = fbHeight << 1;
@@ -98,16 +97,16 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
         pcError = "get fix screen info from fb%d failed\n";
       }
       else {
-        __s = mmap((void *)0x0,(ulong)stFbFixInfo.smem_len,3,1,__fd,0);
-        if (__s == (void *)0xffffffffffffffff) {
+        __s = mmap(NULL, stFbFixInfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED ,__fd,0);
+        if (__s == (void *)-1) {
           pcError = "map fb%d failed\n";
         }
         else {
-          memset(__s,0,(ulong)stFbFixInfo.smem_len);
-          munmap(__s,(ulong)stFbFixInfo.smem_len);
-          iRet = ioctl(__fd,0x40104628,&stColorKey);
+          memset(__s,0,stFbFixInfo.smem_len);
+          munmap(__s,stFbFixInfo.smem_len);
+          iRet = ioctl(__fd,AX_FBIOPUT_COLORKEY,&stColorKey);
           if (-1 < iRet) {
-            maix::log::info("init fb%d done\n",(ulong)fbindex);
+            maix::log::info("init fb%d done\n",fbindex);
             goto done;
           }
           pcError = "set fb%d colorkey failed!\n";
@@ -115,10 +114,10 @@ int __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig,int nFbLayer)
       }
     }
   }
-  maix::log::error(pcError,(ulong)fbindex);
+  maix::log::error(pcError,fbindex);
 done:
   close(__fd);
-  return 0;
+  return err::ERR_NONE;
 }
 
 
@@ -127,10 +126,11 @@ done:
 // unsigned int)
 
 AX_U32 SAMPLE_CALC_IMAGE_SIZE
-                 (AX_U32 u32Width,AX_U32 u32Height,uint eImgType,AX_U32 u32Stride)
+                 (AX_U32 u32Width,AX_U32 u32Height,uint32_t eImgType,AX_U32 u32Stride)
 
 {
-  ulong uVar1;
+  AX_U32 u32Bpp = 0;
+  uint64_t uTmp;
 
   if (u32Width == 0 || u32Height == 0) {
     printf("\x1b[1;30;31mERROR  :[%s:%d] Invalid width %d or height %d!\x1b[0m\n",
@@ -140,43 +140,46 @@ AX_U32 SAMPLE_CALC_IMAGE_SIZE
   if (u32Stride == 0) {
     u32Stride = u32Width;
   }
-  if ((int)eImgType < 0xf) {
+  if (eImgType < AX_FORMAT_YUV422_INTERLEAVED_VYUY) {
     switch(eImgType) {
-    case 0:
-      eImgType = 8;
+    case AX_FORMAT_YUV400:
+      u32Bpp = 8;
       break;
-    case 1:
-    case 3:
-    case 4:
-      eImgType = 0xc;
+    case AX_FORMAT_YUV420_PLANAR:
+    case AX_FORMAT_YUV420_SEMIPLANAR:
+    case AX_FORMAT_YUV420_SEMIPLANAR_VU:
+      u32Bpp = 12;
       break;
     default:
-      goto default_type;
-    case 0xd:
-    case 0xe:
-      eImgType = 0x10;
+      goto default_bpp;
+    case AX_FORMAT_YUV422_INTERLEAVED_YUYV:
+    case AX_FORMAT_YUV422_INTERLEAVED_UYVY:
+      u32Bpp = 16;
     }
   }
   else {
-    if (eImgType == 0x18) goto done;
-    if (eImgType - 0xa1 < 0x31) {
-      uVar1 = 1L << ((ulong)(eImgType - 0xa1) & 0x3f);
-      if ((uVar1 & 0x1414000000000) == 0) {
-        eImgType = 0;
-        if ((uVar1 & 0x11) != 0) {
-          eImgType = 0x18;
+    if (eImgType == AX_FORMAT_YUV444_PACKED) {
+      u32Bpp = 24;
+      goto done;
+    }
+    if (eImgType - AX_FORMAT_RGB888 < 0x31) {
+      uTmp = 1L << ((ulong)(eImgType - AX_FORMAT_RGB888) & 0x3f);
+      if ((uTmp & 0x1414000000000) == 0) {
+        u32Bpp = 0;
+        if ((uTmp & 0x11) != 0) {
+          u32Bpp = 24;
         }
       }
       else {
-        eImgType = 0x20;
+        u32Bpp = 32;
       }
       goto done;
     }
-default_type:
-    eImgType = 0;
+default_bpp:
+    u32Bpp = 0;
   }
 done:
-  return u32Stride * u32Height * eImgType >> 3;
+  return u32Stride * u32Height * u32Bpp >> 3;
 }
 
 
@@ -234,14 +237,14 @@ extern "C" {
 
 static bool LT6911_HDMI_Enable()
 {
-  uint uAddr;
+  uint32_t uAddr;
   bool bRet;
   int __fd;
   int *pError;
   void *__addr;
-  uint *pData;
+  uint32_t *pData;
   long lCntr;
-  ulong __offset;
+  uint64_t __offset;
   char *sError;
   uint32_t pin_data[22] = {
     0x0230000C, 0x00020043,
@@ -257,7 +260,7 @@ static bool LT6911_HDMI_Enable()
     0x02300084, 0x00040003,
   };
 
-  __fd = open("/dev/mem",0x101002);
+  __fd = open("/dev/mem", O_SYNC | O_RDWR);
   if (__fd < 0) {
     pError = __errno_location();
     sError = strerror(*pError);
@@ -267,17 +270,17 @@ static bool LT6911_HDMI_Enable()
   else {
     pData = &pin_data[0];
     lCntr = 0xc;
-    while (lCntr = lCntr + -1, lCntr != 0) {
+    while (lCntr = lCntr - 1, lCntr != 0) {
       uAddr = *pData;
       __offset = (ulong)uAddr & 0xfffff000;
-      __addr = mmap((void *)0x0,0x1000,3,1,__fd,__offset);
-      if (__addr == (void *)0xffffffffffffffff) {
+      __addr = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED ,__fd,__offset);
+      if (__addr == (void *)-1) {
         pError = __errno_location();
         sError = strerror(*pError);
         printf("mmap failed for address 0x%x, error: %s\n", *pData, sError);
       }
       else {
-        *(uint *)((long)__addr + (uAddr - __offset)) = pData[1];
+        *(uint32_t *)((long)__addr + (uAddr - __offset)) = pData[1];
         munmap(__addr,0x1000);
       }
       pData = pData + 2;
@@ -303,8 +306,9 @@ Frame::Frame
 
 {
   AX_VIDEO_FRAME_T *ptSrc;
+  AX_U32 u32Height;
   AX_U32 u32Stride;
-  AX_U32 u32Tmp;
+  AX_U32 u32FrameSize;
   AX_S32 s32Ret;
   frame_video_param_t *__s;
   AX_VOID *pVirAddr;
@@ -333,16 +337,16 @@ Frame::Frame
         goto do_map;
       }
       pVirAddr = AX_SYS_MmapCache((__s->stFrame).u64PhyAddr[0],(__s->stFrame).u32FrameSize);
-      u32Tmp = (__s->stFrame).u32Height;
+      u32Height = (__s->stFrame).u32Height;
       u32Stride = (__s->stFrame).u32PicStride[0];
       (__s->stFrame).u64VirAddr[0] = (AX_U64)pVirAddr;
-      (__s->stFrame).u64VirAddr[1] = (ulong)(u32Stride * u32Tmp) + (long)pVirAddr;
+      (__s->stFrame).u64VirAddr[1] = (ulong)(u32Stride * u32Height) + (long)pVirAddr;
       if (invert_fmt != AX_FORMAT_INVALID) {
         uTdpPhyAddr = 0;
         pTdpVirAddr = (AX_VOID *)0x0;
         memset(&stVideoFrame,0,sizeof(stVideoFrame));
-        u32Tmp = SAMPLE_CALC_IMAGE_SIZE((__s->stFrame).u32Width,u32Tmp,invert_fmt,u32Stride);
-        s32Ret = AX_SYS_MemAllocCached(&uTdpPhyAddr,&pTdpVirAddr,u32Tmp,0x1000,(AX_S8 *)"tdp used");
+        u32FrameSize = SAMPLE_CALC_IMAGE_SIZE((__s->stFrame).u32Width,u32Height,invert_fmt,u32Stride);
+        s32Ret = AX_SYS_MemAllocCached(&uTdpPhyAddr,&pTdpVirAddr,u32FrameSize,0x1000,(AX_S8 *)"tdp used");
         if (s32Ret != 0) {
           maix::err::check_raise(err::ERR_RUNTIME,"AX_SYS_MemAllocCached failed");
         }
@@ -354,7 +358,7 @@ Frame::Frame
         stVideoFrame.u64PhyAddr[0] = uTdpPhyAddr;
         stVideoFrame.u64VirAddr[0] = (AX_U64)pTdpVirAddr;
         stVideoFrame.enImgFormat = invert_fmt;
-        stVideoFrame.u32FrameSize = u32Tmp;
+        stVideoFrame.u32FrameSize = u32FrameSize;
         AX_IVPS_CscTdp(ptSrc,&stVideoFrame);
         AX_SYS_MinvalidateCache(uTdpPhyAddr,pTdpVirAddr,stVideoFrame.u32FrameSize);
         AX_SYS_Munmap((AX_VOID *)(__s->stFrame).u64VirAddr[0],(__s->stFrame).u32FrameSize);
@@ -400,18 +404,16 @@ set_data:
       maix::err::check_raise(err::ERR_NOT_IMPL,"frame format not implemented");
     }
     else {
-      maix::log::error("[%s][%d] frame from %d not implemented","Frame",__LINE__,(ulong)from);
+      maix::log::error("[%s][%d] frame from %d not implemented","Frame",__LINE__,from);
       maix::err::check_raise(err::ERR_NOT_IMPL,"frame from not implemented");
     }
   }
 done:
-  u32Tmp = (__s->stFrame).u32Height;
   this->w = (__s->stFrame).u32Width;
-  this->h = u32Tmp;
+  this->h = (__s->stFrame).u32Height;
   this->fmt = (__s->stFrame).enImgFormat;
-  u32Tmp = (__s->stFrame).u32FrameSize;
   this->__param = (frame_param_t *)__s;
-  this->len = u32Tmp;
+  this->len = (__s->stFrame).u32FrameSize;
   return;
 }
 
@@ -425,7 +427,6 @@ Frame::Frame(int venc_ch,axVENC_STREAM_T *frame,frame_from_e from)
 {
   frame_param_t *__s;
   AX_U8 *pData;
-  AX_U32 u32Tmp;
 
   __s = (frame_param_t *)malloc(sizeof(*__s));
   if (__s == (frame_param_t *)0x0) {
@@ -437,9 +438,8 @@ Frame::Frame(int venc_ch,axVENC_STREAM_T *frame,frame_from_e from)
   __s->venc_chn = (uint16_t)venc_ch;
   __s->from = from;
   this->data = pData;
-  u32Tmp = (frame->stPack).u32Len;
   this->__param = __s;
-  this->len = u32Tmp;
+  this->len = (frame->stPack).u32Len;
   return;
 }
 
@@ -452,7 +452,7 @@ Frame::Frame
           (int vdec_ch,AX_VIDEO_FRAME_INFO_T *frame,frame_from_e from)
 
 {
-  AX_U32 u32Tmp;
+  AX_U32 u32FrameSize;
   frame_param_t *__s;
   AX_VOID *pVirAddr;
   AX_U64 uPhyAddr;
@@ -463,12 +463,12 @@ Frame::Frame
     maix::err::check_raise(err::ERR_RUNTIME,"malloc failed");
   }
   srcImgFormat = (frame->stVFrame).enImgFormat;
-  u32Tmp = SAMPLE_CALC_IMAGE_SIZE
+  u32FrameSize = SAMPLE_CALC_IMAGE_SIZE
                      ((frame->stVFrame).u32Width,(frame->stVFrame).u32Height,srcImgFormat,
                       (frame->stVFrame).u32PicStride[0]);
   if ((uint)((frame->stVFrame).enImgFormat + ~AX_FORMAT_YUV420_PLANAR_VU) < 2) {
-    pVirAddr = AX_SYS_MmapCache((frame->stVFrame).u64PhyAddr[0],u32Tmp);
-    (frame->stVFrame).u32FrameSize = u32Tmp;
+    pVirAddr = AX_SYS_MmapCache((frame->stVFrame).u64PhyAddr[0],u32FrameSize);
+    (frame->stVFrame).u32FrameSize = u32FrameSize;
     (frame->stVFrame).u64VirAddr[0] = (AX_U64)pVirAddr;
     (frame->stVFrame).u64VirAddr[1] =
          (ulong)((frame->stVFrame).u32PicStride[0] * (frame->stVFrame).u32Height) + (long)pVirAddr;
@@ -483,9 +483,8 @@ Frame::Frame
   __s->from = from;
   this->data = (void*)uPhyAddr;
   this->len = (frame->stVFrame).u32FrameSize;
-  u32Tmp = (frame->stVFrame).u32Height;
   this->w = (frame->stVFrame).u32Width;
-  this->h = u32Tmp;
+  this->h = (frame->stVFrame).u32Height;
   srcImgFormat = (frame->stVFrame).enImgFormat;
   this->__param = __s;
   this->fmt = srcImgFormat;
@@ -499,13 +498,12 @@ Frame::Frame
 Frame::Frame(int w,int h,void *data,int data_size,AX_IMG_FORMAT_E fmt)
 
 {
-  AX_U32 uTmp1;
-  uint uTmp2;
+  AX_S32 s32Ret;
+  AX_U32 u32FrameSize;
   frame_video_param_t *__s;
   AX_U64 uPhyAddr;
   AX_VOID *pVirAddr;
   AX_VIDEO_FRAME_T stVideoFrame;
-  AX_IMG_FORMAT_E srcImageFormat;
 
   __s = (frame_video_param_t *)malloc(sizeof(*__s));
   if (__s == (frame_video_param_t *)0x0) {
@@ -516,9 +514,9 @@ Frame::Frame(int w,int h,void *data,int data_size,AX_IMG_FORMAT_E fmt)
   uPhyAddr = 0;
   pVirAddr = (AX_VOID *)0x0;
   memset(&stVideoFrame,0,sizeof(stVideoFrame));
-  uTmp1 = SAMPLE_CALC_IMAGE_SIZE(w,h,fmt,w);
-  uTmp2 = AX_SYS_MemAllocCached(&uPhyAddr,&pVirAddr,uTmp1,0x1000,(const AX_S8 *)"ax alloc frame");
-  if (uTmp2 == 0) {
+  u32FrameSize = SAMPLE_CALC_IMAGE_SIZE(w,h,fmt,w);
+  s32Ret = AX_SYS_MemAllocCached(&uPhyAddr,&pVirAddr,u32FrameSize,0x1000,(const AX_S8 *)"ax alloc frame");
+  if (s32Ret == 0) {
     if (fmt - 3 < 2) {
       stVideoFrame.u64PhyAddr[1] = uPhyAddr + (uint)(w * h);
       stVideoFrame.u64VirAddr[1] = (long)pVirAddr + (ulong)(uint)(w * h);
@@ -535,15 +533,14 @@ Frame::Frame(int w,int h,void *data,int data_size,AX_IMG_FORMAT_E fmt)
     stVideoFrame.u32Height = h;
     stVideoFrame.enImgFormat = fmt;
     stVideoFrame.u32PicStride[0] = w;
-    stVideoFrame.u32FrameSize = uTmp1;
+    stVideoFrame.u32FrameSize = u32FrameSize;
     memcpy(&__s->stFrame,&stVideoFrame,sizeof(__s->stFrame));
   }
-  else if ((uTmp2 & 0xffff) != 0) {
+  else if ((s32Ret & 0xffff) != 0) {
     maix::err::check_raise(err::ERR_RUNTIME,"ax malloc frame failed!");
   }
-  uTmp2 = (__s->stFrame).u32FrameSize;
-  if (uTmp2 != (uint)data_size) {
-    maix::log::error("input size not correctly, input size:%d, need size:%d",(ulong)data_size);
+  if ((__s->stFrame).u32FrameSize != (uint32_t)data_size) {
+    maix::log::error("input size not correctly, input size:%d, need size:%d",(__s->stFrame).u32FrameSize,data_size);
     maix::err::check_raise(err::ERR_RUNTIME,"input size not correctly");
   }
   memcpy((void *)(__s->stFrame).u64VirAddr[0],data,(long)(int)data_size);
@@ -551,12 +548,10 @@ Frame::Frame(int w,int h,void *data,int data_size,AX_IMG_FORMAT_E fmt)
                      (__s->stFrame).u32FrameSize);
   this->data = (void *)(__s->stFrame).u64VirAddr[0];
   this->len = (__s->stFrame).u32FrameSize;
-  uTmp1 = (__s->stFrame).u32Height;
   this->w = (__s->stFrame).u32Width;
-  this->h = uTmp1;
-  srcImageFormat = (__s->stFrame).enImgFormat;
+  this->h = (__s->stFrame).u32Height;
   this->__param = (frame_param_t *)__s;
-  this->fmt = srcImageFormat;
+  this->fmt = (__s->stFrame).enImgFormat;
   return;
 }
 
@@ -568,12 +563,11 @@ Frame::Frame
           (int pool_id,int w,int h,void *data,int data_size,AX_IMG_FORMAT_E fmt)
 
 {
-  AX_U32 u32Tmp;
+  AX_U32 u32FrameSize;
   AX_BLK BlockId;
   frame_video_param_t *__s;
   AX_U64 uPhyAddr;
   AX_VOID *pVirAddr;
-  AX_IMG_FORMAT_E srcImgFormat;
 
   __s = (frame_video_param_t *)malloc(sizeof(*__s));
   if (__s == (frame_video_param_t *)0x0) {
@@ -581,12 +575,12 @@ Frame::Frame
   }
   memset(__s,0,sizeof(*__s));
   __s->from = FRAME_FROM_GET_BLOCK;
-  u32Tmp = SAMPLE_CALC_IMAGE_SIZE(w,h,fmt,w);
-  BlockId = AX_POOL_GetBlock(pool_id,(ulong)u32Tmp,(AX_S8 *)0x0);
+  u32FrameSize = SAMPLE_CALC_IMAGE_SIZE(w,h,fmt,w);
+  BlockId = AX_POOL_GetBlock(pool_id,u32FrameSize,(AX_S8 *)0x0);
   if (BlockId == 0) {
     maix::err::check_raise(err::ERR_RUNTIME,"Frame AX_POOL_GetBlock failed!");
   }
-  (__s->stFrame).u32FrameSize = u32Tmp;
+  (__s->stFrame).u32FrameSize = u32FrameSize;
   uPhyAddr = AX_POOL_Handle2PhysAddr(BlockId);
   (__s->stFrame).u64PhyAddr[0] = uPhyAddr;
   pVirAddr = AX_POOL_GetBlockVirAddr(BlockId);
@@ -604,12 +598,10 @@ Frame::Frame
   memcpy(pVirAddr,data,(long)data_size);
   this->data = (void *)(__s->stFrame).u64VirAddr[0];
   this->len = (__s->stFrame).u32FrameSize;
-  u32Tmp = (__s->stFrame).u32Height;
   this->w = (__s->stFrame).u32Width;
-  this->h = u32Tmp;
-  srcImgFormat = (__s->stFrame).enImgFormat;
+  this->h = (__s->stFrame).u32Height;
   this->__param = (frame_param_t *)__s;
-  this->fmt = srcImgFormat;
+  this->fmt = (__s->stFrame).enImgFormat;
   return;
 }
 
@@ -656,7 +648,7 @@ Frame::Frame(void *data,int data_size,frame_from_e from)
     AX_SYS_MflushCache(uPhyAddr,pVirAddr,data_size);
   }
   else {
-    maix::log::error("[%s][%d] frame from %d not implemented","Frame",__LINE__,(ulong)from);
+    maix::log::error("[%s][%d] frame from %d not implemented","Frame",__LINE__,from);
     maix::err::check_raise(err::ERR_NOT_IMPL,"frame from not implemented");
   }
   this->__param = __s;
@@ -673,15 +665,6 @@ Frame::Frame
 
 {
   frame_audio_param_t *__s;
-  AX_U8 *pVirAddr;
-  AX_U64 uPhyAddr;
-  uint64_t uTimeStamp;
-  AX_BOOL b32Eof;
-  AX_AUDIO_BIT_WIDTH_E enBitwidth;
-  AX_AUDIO_SOUND_MODE_E enSoundmode;
-  AX_U32 u32BlkId;
-  AX_U32 u32Len;
-  AX_U32 u32Seq;
 
   maix::err::check_bool_raise(from == FRAME_FROM_AUDIO_GET_FRAME,"Create this frame is only support from FRAME_FROM_AUDIO_GET_FRAME");
   __s = (frame_audio_param_t *)malloc(sizeof(*__s));
@@ -689,28 +672,19 @@ Frame::Frame
     maix::err::check_raise(err::ERR_RUNTIME,"malloc failed");
   }
   memset(__s,0,sizeof(*__s));
-  pVirAddr = frame->u64VirAddr;
-  enBitwidth = frame->enBitwidth;
-  enSoundmode = frame->enSoundmode;
-  uTimeStamp = frame->u64TimeStamp;
-  uPhyAddr = frame->u64PhyAddr;
   __s->card = card;
   __s->device = device;
   __s->from = from;
-  b32Eof = frame->bEof;
-  u32BlkId = frame->u32BlkId;
-  __s->vir_addr = pVirAddr;
-  __s->bit_width = enBitwidth;
-  __s->sound_mode = enSoundmode;
-  __s->timestamp = uTimeStamp;
-  __s->phy_addr = (void*)uPhyAddr;
-  u32Seq = frame->u32Seq;
-  u32Len = frame->u32Len;
+  __s->vir_addr = frame->u64VirAddr;
+  __s->bit_width = frame->enBitwidth;
+  __s->sound_mode = frame->enSoundmode;
+  __s->timestamp = frame->u64TimeStamp;
+  __s->phy_addr = (void*)frame->u64PhyAddr;
   *(uint64_t *)__s->pool_id = *(uint64_t *)frame->u32PoolId;
-  __s->seq = u32Seq;
-  __s->len = u32Len;
-  __s->eof = b32Eof;
-  __s->blk_id = u32BlkId;
+  __s->seq = frame->u32Seq;
+  __s->len = frame->u32Len;
+  __s->eof = frame->bEof;
+  __s->blk_id = frame->u32BlkId;
   this->data = frame->u64VirAddr;
   this->__param = (frame_param_t *)__s;
   this->len = frame->u32Len;
@@ -765,8 +739,6 @@ Frame::Frame
 {
   frame_param_t *__s;
   AX_VOID *pVirAddr;
-  AX_IMG_FORMAT_E srcImgFormat;
-  AX_U32 u32Tmp;
 
   __s = (frame_param_t *)malloc(sizeof(*__s));
   if (__s == (frame_param_t *)0x0) {
@@ -781,12 +753,10 @@ Frame::Frame
   __s->from = from;
   this->data = pVirAddr;
   this->len = (pImgInfo->tFrameInfo).stVFrame.u32FrameSize;
-  u32Tmp = (pImgInfo->tFrameInfo).stVFrame.u32Height;
   this->w = (pImgInfo->tFrameInfo).stVFrame.u32Width;
-  this->h = u32Tmp;
-  srcImgFormat = (pImgInfo->tFrameInfo).stVFrame.enImgFormat;
+  this->h = (pImgInfo->tFrameInfo).stVFrame.u32Height;
   this->__param = __s;
-  this->fmt = srcImgFormat;
+  this->fmt = (pImgInfo->tFrameInfo).stVFrame.enImgFormat;
   return;
 }
 
@@ -805,7 +775,7 @@ Frame::~Frame()
     return;
   }
   switch(this_param->from) {
-  case 0:
+  case FRAME_FROM_IVPS_CHN:
     AX_SYS_Munmap(*(AX_VOID **)(this_param->data + 0x50),*(AX_U32 *)(this_param->data + 0xe4));
     this_param->data[0x50] = '\0';
     this_param->data[0x51] = '\0';
@@ -824,38 +794,38 @@ Frame::~Frame()
     this_param->data[0x5e] = '\0';
     this_param->data[0x5f] = '\0';
     AX_IVPS_ReleaseChnFrame(this_param->ivps_grp,this_param->ivps_chn,(AX_VIDEO_FRAME_T *)this_param->data);
-  case 4:
+  case FRAME_FROM_MALLOC:
 malloc_type:
     if (((*(char *)((long)&this_param->par1 + 1) != 0) && ((char)this_param->par1 != 0)) &&
        (this->data != (void *)0x0)) {
       free(this->data);
     }
     break;
-  case 1:
+  case FRAME_FROM_SYS_MEM_ALLOC:
     AX_SYS_MemFree(*(AX_U64 *)(this_param->data + 0x38),*(AX_VOID **)(this_param->data + 0x50));
     goto malloc_type;
-  case 2:
+  case FRAME_FROM_VENC_GET_STREAM:
     AX_VENC_ReleaseStream((int)(short)this_param->venc_chn,(AX_VENC_STREAM_T *)this_param->data);
     break;
-  case 3:
+  case FRAME_FROM_GET_BLOCK:
     BlockId = *(AX_BLK *)(this_param->data + 0xa4);
     goto release_block;
-  case 5:
+  case FRAME_FROM_VDEC_GET_STREAM:
     AX_SYS_Munmap(*(AX_VOID **)(this_param->data + 0x50),*(AX_U32 *)(this_param->data + 0xe4));
     AX_VDEC_ReleaseFrame((int)(short)this_param->vdec_chn,(AX_VIDEO_FRAME_INFO_T *)this_param->data);
     break;
-  case 6:
+  case FRAME_FROM_AX_MALLOC:
     AX_SYS_MemFree(this->phy_addr,this->data);
     break;
-  case 7:
+  case FRAME_FROM_AUDIO_GET_FRAME:
     AX_AI_ReleaseFrame(this_param->card,this_param->device,(AX_AUDIO_FRAME_T *)this_param->data);
     break;
-  case 8:
+  case FRAME_FROM_AUDIO_FRAME:
     BlockId = *(AX_BLK *)(this_param->data + 0x34);
 release_block:
     AX_POOL_ReleaseBlock(BlockId);
     break;
-  case 9:
+  case FRAME_FROM_GET_RAW_FRAME:
     AX_VIN_ReleaseRawFrame
               ((AX_U8)this_param->pipe_id,(AX_VIN_PIPE_DUMP_NODE_E)this_param->raw_id,(AX_SNS_HDR_FRAME_E)this_param->sns_frame,(AX_IMG_INFO_T *)this_param->data);
     break;
@@ -895,7 +865,7 @@ err::Err Frame::get_video_frame(AX_VIDEO_FRAME_T * frame)
     uRet = err::ERR_NONE;
   }
   else {
-    maix::log::error("get video frame failed! frame from %d not implemented",(ulong)eFrom);
+    maix::log::error("get video frame failed! frame from %d not implemented",eFrom);
     uRet = err::ERR_RUNTIME;
   }
   return uRet;
@@ -918,7 +888,7 @@ err::Err Frame::set_video_frame(AX_VIDEO_FRAME_T * frame)
     uRet = err::ERR_NONE;
   }
   else {
-    maix::log::error("get video frame failed! frame from %d not implemented",(ulong)eFrom);
+    maix::log::error("get video frame failed! frame from %d not implemented",eFrom);
     uRet = err::ERR_RUNTIME;
   }
   return uRet;
@@ -932,33 +902,22 @@ err::Err Frame::get_audio_frame(AX_AUDIO_FRAME_T * frame)
 
 {
   frame_audio_param_t *this_param;
-  void *phy_addr;
-  uint64_t timestamp;
-  uint32_t uTmp1;
-  uint32_t uTmp2;
 
   this_param = (frame_audio_param_t *)this->__param;
   if (this_param->from != FRAME_FROM_AUDIO_FRAME) {
     maix::log::error("get audio frame failed! frame from %d not implemented",this_param->from);
     return err::ERR_RUNTIME;
   }
-  uTmp1 = this_param->bit_width;
-  uTmp2 = this_param->sound_mode;
-  timestamp = this_param->timestamp;
-  phy_addr = this_param->phy_addr;
   frame->u64VirAddr = (AX_U8 *)this_param->vir_addr;
-  frame->enBitwidth = (AX_AUDIO_BIT_WIDTH_E)uTmp1;
-  frame->enSoundmode = (AX_AUDIO_SOUND_MODE_E)uTmp2;
-  frame->u64TimeStamp = timestamp;
-  frame->u64PhyAddr = (AX_U64)phy_addr;
-  uTmp1 = this_param->seq;
-  uTmp2 = this_param->len;
+  frame->enBitwidth = (AX_AUDIO_BIT_WIDTH_E)this_param->bit_width;
+  frame->enSoundmode = (AX_AUDIO_SOUND_MODE_E)this_param->sound_mode;
+  frame->u64TimeStamp = this_param->timestamp;
+  frame->u64PhyAddr = (AX_U64)this_param->phy_addr;
   *(uint64_t *)frame->u32PoolId = *(uint64_t *)this_param->pool_id;
-  frame->u32Seq = uTmp1;
-  frame->u32Len = uTmp2;
-  uTmp1 = this_param->blk_id;
+  frame->u32Seq = this_param->seq;
+  frame->u32Len = this_param->len;
   frame->bEof = (AX_BOOL)this_param->eof;
-  frame->u32BlkId = uTmp1;
+  frame->u32BlkId = this_param->blk_id;
   return err::ERR_NONE;
 }
 
@@ -970,35 +929,22 @@ err::Err Frame::set_audio_frame(AX_AUDIO_FRAME_T * frame)
 
 {
   frame_audio_param_t *this_param;
-  void *phy_addr;
-  uint64_t timestamp;
-  AX_AUDIO_BIT_WIDTH_E bit_width;
-  AX_AUDIO_SOUND_MODE_E sound_mode;
-  AX_U32 uTmp1;
-  AX_U32 uTmp2;
 
   this_param = (frame_audio_param_t *)this->__param;
   if (this_param->from != FRAME_FROM_AUDIO_FRAME) {
     maix::log::error("get audio frame failed! frame from %d not implemented",this_param->from);
     return err::ERR_RUNTIME;
   }
-  bit_width = frame->enBitwidth;
-  sound_mode = frame->enSoundmode;
-  timestamp = frame->u64TimeStamp;
-  phy_addr = (void *)frame->u64PhyAddr;
   this_param->vir_addr = frame->u64VirAddr;
-  this_param->bit_width = bit_width;
-  this_param->sound_mode = sound_mode;
-  this_param->timestamp = timestamp;
-  this_param->phy_addr = phy_addr;
-  uTmp1 = frame->u32Seq;
-  uTmp2 = frame->u32Len;
+  this_param->bit_width = frame->enBitwidth;
+  this_param->sound_mode = frame->enSoundmode;
+  this_param->timestamp = frame->u64TimeStamp;
+  this_param->phy_addr = (void *)frame->u64PhyAddr;
   *(uint64_t *)this_param->pool_id = *(uint64_t *)frame->u32PoolId;
-  this_param->seq = uTmp1;
-  this_param->len = uTmp2;
-  uTmp1 = frame->u32BlkId;
+  this_param->seq = frame->u32Seq;
+  this_param->len = frame->u32Len;
   this_param->eof = frame->bEof;
-  this_param->blk_id = uTmp1;
+  this_param->blk_id = frame->u32BlkId;
   return err::ERR_NONE;
 }
 
@@ -1105,7 +1051,7 @@ ENGINE::ENGINE(AX_ENGINE_NPU_MODE_T mode)
 err::Err ENGINE::init()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   AX_ENGINE_NPU_ATTR_T stNpuAttr;
   int initCount;
 
@@ -1123,19 +1069,12 @@ err::Err ENGINE::init()
     axMod.lock(AX_MOD_ENGINE);
     initCount = engineMod->init_count;
     if (initCount < 1) {
-      stNpuAttr.reserve[1] = 0;
-      stNpuAttr.reserve[2] = 0;
-      stNpuAttr.reserve[0] = 0;
+      memset(&stNpuAttr,0,sizeof(stNpuAttr));
       stNpuAttr.eHardMode = this->__mode;
-      stNpuAttr.reserve[3] = 0;
-      stNpuAttr.reserve[4] = 0;
-      stNpuAttr.reserve[5] = 0;
-      stNpuAttr.reserve[6] = 0;
-      stNpuAttr.reserve[7] = 0;
       s32Ret = AX_ENGINE_Init(&stNpuAttr);
       if (s32Ret != 0) {
         axMod.unlock(AX_MOD_ENGINE);
-        maix::log::error("ax engine init failed! ret:%#x",(ulong)s32Ret);
+        maix::log::error("ax engine init failed! ret:%#x",s32Ret);
         return err::ERR_RUNTIME;
       }
       engineMod->init_count = 1;
@@ -1146,7 +1085,7 @@ err::Err ENGINE::init()
     }
     axMod.unlock(AX_MOD_ENGINE);
     maix::log::info("maix npu driver used count: %d",
-                    (ulong)(uint)engineMod->init_count);
+                    engineMod->init_count);
     this->__is_inited = true;
   }
   return err::ERR_NONE;
@@ -1160,7 +1099,7 @@ void ENGINE::deinit()
 
 {
   int initCount;
-  uint newInitCount;
+  uint32_t newInitCount;
   char *pcLog;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -1172,7 +1111,7 @@ void ENGINE::deinit()
     initCount = 0;
   }
   else {
-    initCount = initCount + -1;
+    initCount = initCount - 1;
   }
   engineMod->init_count = initCount;
   axMod.unlock(AX_MOD_ENGINE);
@@ -1181,7 +1120,7 @@ void ENGINE::deinit()
   if (newInitCount != 0) {
     pcLog = "";
   }
-  maix::log::info("maix npu driver used count: %d%s",(ulong)newInitCount,pcLog);
+  maix::log::info("maix npu driver used count: %d%s",newInitCount,pcLog);
   this->__is_inited = false;
   return;
 }
@@ -1257,16 +1196,14 @@ VI::VI()
     viMod->IvpsId = 0;
     viMod->nGrpId = 0;
     viMod->nChnNum = 0;
-    uCommPoolCfgCnt = pCommPoolCfg->nWidth;
-    viMod->nGroupInputWidth = uCommPoolCfgCnt;
-    nPrivPoolCfgCnt = pCommPoolCfg->nHeight;
-    viMod->nGroupInputHeight = nPrivPoolCfgCnt;
+    viMod->nGroupInputWidth = pCommPoolCfg->nWidth;
+    viMod->nGroupInputHeight = pCommPoolCfg->nHeight;
     viMod->nGroupInputFormat = dstImageFormat;
+    memset(&viMod->stGrpAttr,0,sizeof(viMod->stGrpAttr));
     viMod->stGrpAttr.nInFifoDepth = 2;
-    u16Width = (AX_U16)uCommPoolCfgCnt;
-    *(uint64_t *)&viMod->stGrpAttr.ePipeline = 0;
+    u16Width = (AX_U16)pCommPoolCfg->nWidth;
     viMod->stPipelineAttr.tFilter[0][0].nDstPicWidth = u16Width;
-    viMod->stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)nPrivPoolCfgCnt;
+    viMod->stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)pCommPoolCfg->nHeight;
     viMod->stPipelineAttr.tFilter[0][0].nDstPicStride = (u16Width + 0xf) & 0xfff0;
     viMod->stPipelineAttr.tFilter[0][0].eDstPicFormat = dstImageFormat;
     viMod->engine = engineCtx;
@@ -1289,25 +1226,25 @@ VI::VI()
 VI::~VI()
 
 {
-  int s32Tmp;
+  int initCount;
   ENGINE *engineCtx;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vi_mod_t *viMod = (ax_vi_mod_t *)axMod.get_param(AX_MOD_VI);
   axMod.lock(AX_MOD_VI);
-  s32Tmp = viMod->init_count;
-  if (s32Tmp < 2) {
+  initCount = viMod->init_count;
+  if (initCount < 2) {
     engineCtx = viMod->engine;
     if (engineCtx != (ENGINE *)0x0) {
       delete engineCtx;
       viMod->engine = (ENGINE *)0x0;
     }
-    s32Tmp = 0;
+    initCount = 0;
   }
   else {
-    s32Tmp = s32Tmp + -1;
+    initCount = initCount - 1;
   }
-  viMod->init_count = s32Tmp;
+  viMod->init_count = initCount;
   axMod.unlock(AX_MOD_VI);
   return;
 }
@@ -1323,11 +1260,11 @@ err::Err VI::init()
   int initCount2;
   AX_S32 s32PipeRet;
   AX_S32 s32SnsRet;
-  uint s32Ret;
+  AX_S32 s32Ret;
   char *pcError;
-  ulong uError;
-  long lCurPipeIdx;
-  AX_CHAR *pFilename;
+  uint64_t uError;
+  uint64_t uCurPipeIdx;
+  SAMPLE_PIPE_INFO_T *ptPipeInfo;
   AX_VIN_STITCH_GRP_ATTR_T stStitchAttr;
   AX_MOD_INFO_T tSrcMod;
   AX_MOD_INFO_T tDstMod;
@@ -1337,17 +1274,8 @@ err::Err VI::init()
   ax_vi_mod_t *viMod = (ax_vi_mod_t *)axMod.get_param(AX_MOD_VI);
   axMod.lock(AX_MOD_VI);
   memcpy(&stCam,viMod->cams,sizeof(stCam));
-  stStitchAttr.bStitch = 0;
-  stStitchAttr.nPipeNum = 0;
-  stStitchAttr.tPipeStitch[0].nPipeId = 0;
-  stStitchAttr.tPipeStitch[0].nMasterFlag = 0;
-  stStitchAttr.tPipeStitch[1].nPipeId = 0;
-  stStitchAttr.tPipeStitch[1].nMasterFlag = 0;
-  stStitchAttr.tPipeStitch[2].nPipeId = 0;
-  stStitchAttr.tPipeStitch[2].nMasterFlag = 0;
+  memset(&stStitchAttr,0,sizeof(stStitchAttr));
   initCount2 = viMod->init_count2;
-  stStitchAttr.tPipeStitch[3].nPipeId = 0;
-  stStitchAttr.tPipeStitch[3].nMasterFlag = 0;
   if (0 < initCount2) {
     initCount2 = initCount2 + 1;
 done:
@@ -1368,34 +1296,34 @@ done:
     s32Ret = AX_VIN_Init();
     if (s32Ret == 0) {
       s32Ret = AX_VIN_GetStitchGrpAttr(0,&stStitchAttr);
-      uError = (ulong)s32Ret;
+      uError = s32Ret;
       if (s32Ret == 0) {
         s32Ret = AX_VIN_SetStitchGrpAttr(0,&stStitchAttr);
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         if (s32Ret != 0) {
           printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
           pcError = "AX_VIN_Init failed, ret=0x%x.\n";
           goto vin_stitchgrp_failed;
         }
         s32Ret = COMMON_CAM_PrivPoolInit(&viMod->tPrivArgs);
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         if (s32Ret != 0) {
           printf("[COMM_ISP][%s][%5d] ","init",__LINE__);
           pcError = "COMMON_CAM_PrivPoolInit fail, ret:0x%x";
           goto vin_stitchgrp_failed;
         }
         s32Ret = AX_MIPI_RX_Init();
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         if (s32Ret != 0) {
           printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
           pcError = "AX_MIPI_RX_Init failed, ret=0x%x.\n";
           goto vin_stitchgrp_failed;
         }
         s32Ret = AX_ISP_OpenSnsClk(stCam.tSnsClkAttr.nSnsClkIdx,stCam.tSnsClkAttr.eSnsClkRate);
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         if (s32Ret == 0) {
           s32Ret = COMMON_ISP_ResetSnsObj(0,stCam.nDevId,stCam.ptSnsHdl[stCam.nPipeId]);
-          uError = (ulong)s32Ret;
+          uError = s32Ret;
           if (s32Ret != 0) {
             printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
             pcError = "COMMON_ISP_ResetSnsObj failed, ret=0x%x.\n";
@@ -1404,7 +1332,7 @@ done:
           s32Ret = COMMON_VIN_StartMipi
                              (stCam.nRxDev & 0xff,stCam.eInputMode,&stCam.tMipiAttr,
                               stCam.eLaneComboMode);
-          uError = (ulong)s32Ret;
+          uError = s32Ret;
           if (s32Ret != 0) {
             printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
             pcError = "COMMON_VIN_StartMipi failed, r-et=0x%x.\n";
@@ -1416,71 +1344,71 @@ done:
           s32Ret = COMMON_VIN_CreateDev
                              (stCam.nDevId,(AX_U8)stCam.nRxDev,&stCam.tDevAttr,&stCam.tDevBindPipe);
           if (s32Ret == 0) {
-            pFilename = stCam.tPipeInfo[0].szBinPath;
-            for (uError = 0; uError < stCam.tDevBindPipe.nNum; uError = uError + 1) {
-              nPipeId = (AX_U8)stCam.tDevBindPipe.nPipeId[uError];
-              stCam.tPipeAttr[stCam.nPipeId].bAiIspEnable = *(AX_BOOL *)(pFilename + -4);
+            ptPipeInfo = &stCam.tPipeInfo[0];
+            for (uCurPipeIdx = 0; uCurPipeIdx < stCam.tDevBindPipe.nNum; uCurPipeIdx = uCurPipeIdx + 1) {
+              nPipeId = (AX_U8)stCam.tDevBindPipe.nPipeId[uCurPipeIdx];
+              stCam.tPipeAttr[stCam.nPipeId].bAiIspEnable = ptPipeInfo->bAiispEnable;
               s32PipeRet = COMMON_VIN_SetPipeAttr
                                 (stCam.eSysMode,stCam.eLoadRawNode,nPipeId,
                                  stCam.tPipeAttr + stCam.nPipeId);
               if (s32PipeRet != 0) {
                 printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
                 printf("COMMON_ISP_SetPipeAttr failed, ret=0x%x.\n",s32PipeRet);
-                uError = (ulong)stCam.nPipeId;
+                uCurPipeIdx = stCam.nPipeId;
                 puts(" ===================== vin pipe info ===================== \r");
-                printf("attr->ePipeWorkMode:%d\r\n",(uint32_t)stCam.tPipeAttr[uError].ePipeWorkMode);
+                printf("attr->ePipeWorkMode:%d\r\n",(uint32_t)stCam.tPipeAttr[uCurPipeIdx].ePipeWorkMode);
                 printf("attr->tPipeImgRgn.nStartX:%d\r\n",
-                       stCam.tPipeAttr[uError].tPipeImgRgn.nStartX);
+                       stCam.tPipeAttr[uCurPipeIdx].tPipeImgRgn.nStartX);
                 printf("attr->tPipeImgRgn.nStartY:%d\r\n",
-                       stCam.tPipeAttr[uError].tPipeImgRgn.nStartY);
+                       stCam.tPipeAttr[uCurPipeIdx].tPipeImgRgn.nStartY);
                 printf("attr->tPipeImgRgn.nWidth:%d\r\n",
-                       stCam.tPipeAttr[uError].tPipeImgRgn.nWidth);
+                       stCam.tPipeAttr[uCurPipeIdx].tPipeImgRgn.nWidth);
                 printf("attr->tPipeImgRgn.nHeight:%d\r\n",
-                       stCam.tPipeAttr[uError].tPipeImgRgn.nHeight);
-                printf("attr->nWidthStride:%d\r\n",stCam.tPipeAttr[uError].nWidthStride);
-                printf("attr->eBayerPattern:%d\r\n",stCam.tPipeAttr[uError].eBayerPattern);
-                printf("attr->ePixelFmt:%d\r\n",(uint32_t)stCam.tPipeAttr[uError].ePixelFmt);
-                printf("attr->eSnsMode:%d\r\n",stCam.tPipeAttr[uError].eSnsMode);
-                printf("attr->eFusionMode:%d\r\n",stCam.tPipeAttr[uError].eFusionMode);
-                printf("attr->bAiIspEnable:%d\r\n",stCam.tPipeAttr[uError].bAiIspEnable);
+                       stCam.tPipeAttr[uCurPipeIdx].tPipeImgRgn.nHeight);
+                printf("attr->nWidthStride:%d\r\n",stCam.tPipeAttr[uCurPipeIdx].nWidthStride);
+                printf("attr->eBayerPattern:%d\r\n",stCam.tPipeAttr[uCurPipeIdx].eBayerPattern);
+                printf("attr->ePixelFmt:%d\r\n",(uint32_t)stCam.tPipeAttr[uCurPipeIdx].ePixelFmt);
+                printf("attr->eSnsMode:%d\r\n",stCam.tPipeAttr[uCurPipeIdx].eSnsMode);
+                printf("attr->eFusionMode:%d\r\n",stCam.tPipeAttr[uCurPipeIdx].eFusionMode);
+                printf("attr->bAiIspEnable:%d\r\n",stCam.tPipeAttr[uCurPipeIdx].bAiIspEnable);
                 printf("attr->tCompressInfo.enCompressMode:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tCompressInfo.enCompressMode);
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tCompressInfo.enCompressMode);
                 printf("attr->tCompressInfo.u32CompressLevel:%d\r\n",
-                       stCam.tPipeAttr[uError].tCompressInfo.u32CompressLevel);
-                printf("attr->eCombMode:%d\r\n",(uint32_t)stCam.tPipeAttr[uError].eCombMode);
+                       stCam.tPipeAttr[uCurPipeIdx].tCompressInfo.u32CompressLevel);
+                printf("attr->eCombMode:%d\r\n",(uint32_t)stCam.tPipeAttr[uCurPipeIdx].eCombMode);
                 printf("attr->tNrAttr.t3DnrAttr.bPwlEnable:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tNrAttr.t3DnrAttr.bPwlEnable);
-                if (stCam.tPipeAttr[uError].tNrAttr.t3DnrAttr.bPwlEnable != AX_FALSE) {
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tNrAttr.t3DnrAttr.bPwlEnable);
+                if (stCam.tPipeAttr[uCurPipeIdx].tNrAttr.t3DnrAttr.bPwlEnable != AX_FALSE) {
                   printf("attr->tNrAttr.t3DnrAttr.tCompressInfo.enCompressMode:%d\r\n",
-                         (uint32_t)stCam.tPipeAttr[uError].tNrAttr.t3DnrAttr.tCompressInfo.
+                         (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tNrAttr.t3DnrAttr.tCompressInfo.
                                 enCompressMode);
                   printf("attr->tNrAttr.t3DnrAttr.tCompressInfo.u32CompressLevel:%d\r\n",
-                         stCam.tPipeAttr[uError].tNrAttr.t3DnrAttr.tCompressInfo.
+                         stCam.tPipeAttr[uCurPipeIdx].tNrAttr.t3DnrAttr.tCompressInfo.
                                 u32CompressLevel);
                 }
                 printf("attr->tNrAttr.tAinrAttr.bPwlEnable:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tNrAttr.tAinrAttr.bPwlEnable);
-                if (stCam.tPipeAttr[uError].tNrAttr.tAinrAttr.bPwlEnable != AX_FALSE) {
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tNrAttr.tAinrAttr.bPwlEnable);
+                if (stCam.tPipeAttr[uCurPipeIdx].tNrAttr.tAinrAttr.bPwlEnable != AX_FALSE) {
                   printf("attr->tNrAttr.tAinrAttr.tCompressInfo.enCompressMode:%d\r\n",
-                         (uint32_t)stCam.tPipeAttr[uError].tNrAttr.tAinrAttr.tCompressInfo.
+                         (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tNrAttr.tAinrAttr.tCompressInfo.
                                 enCompressMode);
                   printf("attr->tNrAttr.tAinrAttr.tCompressInfo.u32CompressLevel:%d\r\n",
-                         stCam.tPipeAttr[uError].tNrAttr.tAinrAttr.tCompressInfo.
+                         stCam.tPipeAttr[uCurPipeIdx].tNrAttr.tAinrAttr.tCompressInfo.
                                 u32CompressLevel);
                 }
                 printf("attr->tFrameRateCtrl.fDstFrameRate:%f\r\n",
-                       stCam.tPipeAttr[uError].tFrameRateCtrl.fDstFrameRate);
+                       stCam.tPipeAttr[uCurPipeIdx].tFrameRateCtrl.fDstFrameRate);
                 printf("attr->tFrameRateCtrl.fSrcFrameRate:%f\r\n",
-                       stCam.tPipeAttr[uError].tFrameRateCtrl.fSrcFrameRate);
+                       stCam.tPipeAttr[uCurPipeIdx].tFrameRateCtrl.fSrcFrameRate);
                 printf("attr->tMotionAttr.bMotionComp:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tMotionAttr.bMotionComp);
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tMotionAttr.bMotionComp);
                 printf("attr->tMotionAttr.bMotionEst:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tMotionAttr.bMotionEst);
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tMotionAttr.bMotionEst);
                 printf("attr->tMotionAttr.bMotionShare:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tMotionAttr.bMotionShare);
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tMotionAttr.bMotionShare);
                 printf("attr->tWarpAttr.eWarpEngine:%d\r\n",
-                       (uint32_t)stCam.tPipeAttr[uError].tWarpAttr.eWarpEngine);
-                s32SnsRet = (AX_GDC_MODE_E)stCam.tPipeAttr[uError].tWarpAttr.uWarpMode.eGdcMode;
+                       (uint32_t)stCam.tPipeAttr[uCurPipeIdx].tWarpAttr.eWarpEngine);
+                s32SnsRet = (AX_GDC_MODE_E)stCam.tPipeAttr[uCurPipeIdx].tWarpAttr.uWarpMode.eGdcMode;
                 pcError = "attr->tWarpAttr.uWarpMode:%d\r\n";
 vin_pipe_failed:
                 printf(pcError,(uint32_t)s32SnsRet);
@@ -1500,7 +1428,7 @@ vin_pipe_failed:
                 printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
                 pcError = "COMMON_ISP_SetSnsAttr failed, ret=0x%x.\n";
 isp_sns_failed:
-                printf(pcError,(ulong)s32Ret);
+                printf(pcError,s32Ret);
 isp_sns_unreg:
                 COMMON_ISP_UnRegisterSns(nPipeId);
                 goto vin_dev_destroy;
@@ -1508,7 +1436,7 @@ isp_sns_unreg:
 isp_pipe_init:
               s32Ret = COMMON_ISP_Init(nPipeId,stCam.ptSnsHdl[stCam.nPipeId],stCam.bRegisterSns,
                                        stCam.bUser3a,&stCam.tAeFuncs,&stCam.tAwbFuncs,
-                                       &stCam.tAfFuncs,&stCam.tLscFuncs,pFilename);
+                                       &stCam.tAfFuncs,&stCam.tLscFuncs,ptPipeInfo->szBinPath);
               if (s32Ret != 0) {
                 printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
                 pcError = "COMMON_ISP_StartIsp failed, axRet = 0x%x.\n";
@@ -1519,7 +1447,7 @@ isp_pipe_init:
                 printf("[COMM_VIN][%s][%5d] ","init",__LINE__);
                 pcError = "AX_VIN_SetChnAttr failed, nRet=0x%x.\n";
 vin_chn_failed:
-                printf(pcError,(ulong)s32Ret);
+                printf(pcError,s32Ret);
 isp_pipe_deinit:
                 COMMON_ISP_DeInit(nPipeId,stCam.bRegisterSns);
                 goto isp_sns_unreg;
@@ -1538,7 +1466,7 @@ vin_stop_chn:
                 COMMON_VIN_StopChn(nPipeId);
                 goto isp_pipe_deinit;
               }
-              pFilename = pFilename + 0x8c;
+              ptPipeInfo = ptPipeInfo + 1;
               s32PipeRet = AX_ISP_Start(nPipeId);
               if (s32PipeRet != 0) {
                 printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
@@ -1550,8 +1478,8 @@ vin_stop_chn:
             s32Ret = COMMON_VIN_StartDev(stCam.nDevId,stCam.bEnableDev,&stCam.tDevAttr);
             if (s32Ret == 0) {
               if ((stCam.bRegisterSns != AX_FALSE) && (stCam.bEnableDev != AX_FALSE)) {
-                for (uError = 0; uError < stCam.tDevBindPipe.nNum; uError = uError + 1) {
-                  s32Ret = AX_ISP_StreamOn((AX_U8)stCam.tDevBindPipe.nPipeId[uError]);
+                for (uCurPipeIdx = 0; uCurPipeIdx < stCam.tDevBindPipe.nNum; uCurPipeIdx = uCurPipeIdx + 1) {
+                  s32Ret = AX_ISP_StreamOn((AX_U8)stCam.tDevBindPipe.nPipeId[uCurPipeIdx]);
                   if (s32Ret != 0) {
                     printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
                     pcError = " failed, ret=0x%x.\n";
@@ -1576,8 +1504,8 @@ vin_stop_chn:
                        "init",__LINE__,s32Ret);
               }
               if ((stCam.bRegisterSns != AX_FALSE) && (stCam.bEnableDev != AX_FALSE)) {
-                for (uError = 0; uError < stCam.tDevBindPipe.nNum; uError = uError + 1) {
-                  AX_ISP_StreamOff((AX_U8)stCam.tDevBindPipe.nPipeId[uError]);
+                for (uCurPipeIdx = 0; uCurPipeIdx < stCam.tDevBindPipe.nNum; uCurPipeIdx = uCurPipeIdx + 1) {
+                  AX_ISP_StreamOff((AX_U8)stCam.tDevBindPipe.nPipeId[uCurPipeIdx]);
                 }
               }
               COMMON_VIN_StopDev(stCam.nDevId,stCam.bEnableDev);
@@ -1586,10 +1514,10 @@ vin_stop_chn:
               printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
               pcError = "COMMON_VIN_StartDev failed, ret=0x%x.\n";
 vin_dev_failed:
-              printf(pcError,(ulong)s32Ret);
+              printf(pcError,s32Ret);
             }
-            for (lCurPipeIdx = 0; (uint)lCurPipeIdx < stCam.tDevBindPipe.nNum; lCurPipeIdx = lCurPipeIdx + 1) {
-              nPipeId = (AX_U8)stCam.tDevBindPipe.nPipeId[lCurPipeIdx];
+            for (uCurPipeIdx = 0; uCurPipeIdx < stCam.tDevBindPipe.nNum; uCurPipeIdx = uCurPipeIdx + 1) {
+              nPipeId = (AX_U8)stCam.tDevBindPipe.nPipeId[uCurPipeIdx];
               AX_ISP_Stop(nPipeId);
               AX_VIN_StopPipe(nPipeId);
               COMMON_VIN_StopChn(nPipeId);
@@ -1628,7 +1556,7 @@ vin_stitchgrp_failed:
     printf("[COMM_CAM][%s][%5d] ","init",__LINE__);
     pcError = "AX_SYS_Link failed, ret:0x%x\n";
   }
-  printf(pcError,(ulong)s32Ret);
+  printf(pcError,s32Ret);
 failed:
   axMod.unlock(AX_MOD_VI);
   maix::err::check_raise(err::ERR_RUNTIME,"vi init failed");
@@ -1642,36 +1570,36 @@ err::Err VI::deinit()
 
 {
   AX_U8 nPipeId;
-  long curPipeIdx;
+  uint64_t uCurPipeIdx;
   AX_MOD_INFO_T tSrcMod;
   AX_MOD_INFO_T tDstMod;
   AX_U8 nDevId;
-  int viInitCount;
+  int initCount2;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vi_mod_t *viMod = (ax_vi_mod_t *)axMod.get_param(AX_MOD_VI);
   axMod.lock(AX_MOD_VI);
   nDevId = viMod->cams[0].nDevId;
-  viInitCount = viMod->init_count2;
-  if (viInitCount < 2) {
-    if (viInitCount == 1) {
+  initCount2 = viMod->init_count2;
+  if (initCount2 < 2) {
+    if (initCount2 == 1) {
       AX_IVPS_DestoryGrp(viMod->nGrpId);
       AX_IVPS_Deinit();
-      for (curPipeIdx = 0; (uint)curPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
-          curPipeIdx = curPipeIdx + 1) {
-        AX_ISP_Stop((AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[curPipeIdx]);
+      for (uCurPipeIdx = 0; uCurPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
+          uCurPipeIdx = uCurPipeIdx + 1) {
+        AX_ISP_Stop((AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[uCurPipeIdx]);
       }
       AX_VIN_DisableDev(nDevId);
       if ((viMod->cams[0].bRegisterSns != AX_FALSE) &&
          (viMod->cams[0].bEnableDev != AX_FALSE)) {
-        for (curPipeIdx = 0; (uint)curPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
-            curPipeIdx = curPipeIdx + 1) {
-          AX_ISP_StreamOff((AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[curPipeIdx]);
+        for (uCurPipeIdx = 0; uCurPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
+            uCurPipeIdx = uCurPipeIdx + 1) {
+          AX_ISP_StreamOff((AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[uCurPipeIdx]);
         }
       }
-      for (curPipeIdx = 0; (uint)curPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
-          curPipeIdx = curPipeIdx + 1) {
-        nPipeId = (AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[curPipeIdx];
+      for (uCurPipeIdx = 0; uCurPipeIdx < viMod->cams[0].tDevBindPipe.nNum;
+          uCurPipeIdx = uCurPipeIdx + 1) {
+        nPipeId = (AX_U8)viMod->cams[0].tDevBindPipe.nPipeId[uCurPipeIdx];
         AX_ISP_CloseSnsClk(nPipeId);
         AX_VIN_StopPipe(nPipeId);
         AX_VIN_DisableChn(nPipeId,AX_VIN_CHN_ID_MAIN);
@@ -1680,7 +1608,7 @@ err::Err VI::deinit()
         AX_ISP_UnRegisterSensor(nPipeId);
         AX_VIN_DestroyPipe(nPipeId);
       }
-      AX_MIPI_RX_Stop((uint)nDevId);
+      AX_MIPI_RX_Stop(nDevId);
       AX_VIN_DestroyDev(nDevId);
       AX_MIPI_RX_DeInit();
       AX_VIN_Deinit();
@@ -1695,7 +1623,7 @@ err::Err VI::deinit()
     }
   }
   else {
-    viMod->init_count2 = viInitCount + -1;
+    viMod->init_count2 = initCount2 - 1;
   }
   axMod.unlock(AX_MOD_VI);
   return err::ERR_NONE;
@@ -1737,23 +1665,24 @@ done:
 err::Err VI::add_channel(int ch, int width, int height, AX_IMG_FORMAT_E format, int fps, int depth, bool mirror, bool vflip, int fit)
 
 {
-  AX_IVPS_FILTER_T (*ptIvpsFilter) [2];
   int FilterChn;
-  ushort u16VppTmp;
-  uint u32DstWidth;
-  uint u32DstHeight;
+  uint16_t u16VppTmp;
+  uint32_t u32DstWidth;
+  uint32_t u32DstHeight;
   int NumIvpsChn;
   IVPS_GRP IvpsGrp;
   AX_S32 s32GrpRet;
-  uint uVar8;
+  AX_S32 s32Ret;
   char *pcError;
   uint64_t uLine;
-  ushort u16VppWidth;
-  ushort u16VppHeight;
+  uint32_t u32AdjWidth;
+  uint32_t u32AdjHeight;
+  uint16_t u16VppWidth;
+  uint16_t u16VppHeight;
   AX_U16 u16DstHeight;
-  uint uVar13;
+  uint32_t nGrpId;
   AX_U16 u16DstWidth;
-  ulong uCurIvpsChn;
+  uint64_t uCurIvpsChn;
   IVPS_CHN CurIvpsChn;
   double dInpRatio;
   double dOutWidth;
@@ -1783,7 +1712,7 @@ err::Err VI::add_channel(int ch, int width, int height, AX_IMG_FORMAT_E format, 
   if ((width & 0xfU) == 0 && (height & 1U) == 0) {
     if ((0x1f < width && height != 0x1f) && (width < 0x20 || 0x1e < height)) {
       s32GrpRet = AX_IVPS_StopGrp(viMod->nGrpId);
-      if ((s32GrpRet != 0) && (s32GrpRet != -0x7ff2feeb)) {
+      if ((s32GrpRet != 0) && (s32GrpRet != AX_ERR_IVPS_NOT_PERM)) {
         printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x\x1b[0m\n",
                "add_channel",__LINE__,(uint32_t)viMod->nGrpId,s32GrpRet);
       }
@@ -1792,11 +1721,11 @@ err::Err VI::add_channel(int ch, int width, int height, AX_IMG_FORMAT_E format, 
         NumIvpsChn = viMod->nChnNum;
         IvpsGrp = viMod->nGrpId;
         if (NumIvpsChn <= CurIvpsChn) break;
-        uVar8 = AX_IVPS_DisableChn(IvpsGrp,CurIvpsChn);
-        if (uVar8 != 0) {
+        s32Ret = AX_IVPS_DisableChn(IvpsGrp,CurIvpsChn);
+        if (s32Ret != 0) {
           printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\x1b[0m\n"
                  ,"add_channel",__LINE__,(uint32_t)viMod->nGrpId,
-                 (uint32_t)CurIvpsChn,uVar8);
+                 (uint32_t)CurIvpsChn,s32Ret);
         }
         CurIvpsChn = CurIvpsChn + 1;
       }
@@ -1813,9 +1742,8 @@ err::Err VI::add_channel(int ch, int width, int height, AX_IMG_FORMAT_E format, 
       viMod->stPipelineAttr.nOutChnNum = (AX_U8)NumIvpsChn;
       if (fit == 0) {
 no_fit:
-        ptIvpsFilter = viMod->stPipelineAttr.tFilter + FilterChn;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + 0))->bEngage = AX_TRUE;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + 0))->eEngine = AX_IVPS_ENGINE_TDP;
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].bEngage = AX_TRUE;
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].eEngine = AX_IVPS_ENGINE_TDP;
         u16DstHeight = (AX_U16)height;
         u16DstWidth = (AX_U16)width;
         if ((viMod->eRotAngle & ~AX_IVPS_ROTATION_180) == AX_IVPS_ROTATION_90) {
@@ -1828,7 +1756,7 @@ no_fit:
         (viMod->stPipelineAttr).tFilter[FilterChn][0].nDstPicHeight = u16DstHeight;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].nDstPicStride = (u16DstWidth + 0xf) & 0xfff0;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].tTdpCfg.bMirror = (AX_BOOL)mirror;
-        if ((format & 0xfffffff7) == 199) {
+        if ((format & 0xfffffff7) == AX_FORMAT_ARGB8888) {
           format = AX_FORMAT_YUV420_SEMIPLANAR;
         }
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eDstPicFormat = format;
@@ -1847,33 +1775,31 @@ no_fit:
         else {
           width = (int)(dInpRatio * dOutHeight) & 0xffff;
         }
-        uVar13 = (width + 0xfU) & 0xfffffff0;
-        uVar8 = (height + 1U) & 0xfffffffe;
-        u16VppTmp = (ushort)(height + 1U) & 0xfffe;
-        ptIvpsFilter = viMod->stPipelineAttr.tFilter + FilterChn;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + 0))->bEngage = AX_TRUE;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + 0))->eEngine = AX_IVPS_ENGINE_VPP;
-        u16VppWidth = (ushort)(width + 0xfU) & 0xfff0;
+        u32AdjWidth = (width + 0xfU) & 0xfffffff0;
+        u32AdjHeight = (height + 1U) & 0xfffffffe;
+        u16VppTmp = (uint16_t)(height + 1U) & 0xfffe;
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].bEngage = AX_TRUE;
+        (viMod->stPipelineAttr).tFilter[FilterChn][0].eEngine = AX_IVPS_ENGINE_VPP;
+        u16VppWidth = (uint16_t)(width + 0xfU) & 0xfff0;
         u16VppHeight = u16VppTmp;
         if ((viMod->eRotAngle & ~AX_IVPS_ROTATION_180) == AX_IVPS_ROTATION_90) {
           u16VppHeight = u16VppWidth;
           u16VppWidth = u16VppTmp;
         }
-        dInpRatio = (double)(int)uVar13 / dOutWidth;
-        dInpHeight = (double)(int)uVar8 / dOutHeight;
+        dInpRatio = (double)(int)u32AdjWidth / dOutWidth;
+        dInpHeight = (double)(int)u32AdjHeight / dOutHeight;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].nDstPicWidth = u16VppWidth;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].nDstPicHeight = u16VppHeight;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].nDstPicStride = (u16VppWidth + 0xf) & 0xfff0;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR;
-        ptIvpsFilter = viMod->stPipelineAttr.tFilter + FilterChn;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + sizeof(ptIvpsFilter[0][0])))->bEngage = AX_TRUE;
-        ((AX_IVPS_FILTER_T *)((long)ptIvpsFilter + sizeof(ptIvpsFilter[0][0])))->eEngine = AX_IVPS_ENGINE_TDP;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].bEngage = AX_TRUE;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].eEngine = AX_IVPS_ENGINE_TDP;
         (viMod->stPipelineAttr).tFilter[FilterChn][1].bCrop = AX_TRUE;
         if (dInpHeight <= dInpRatio) {
           dInpRatio = dInpHeight;
         }
         dstImgFormat = AX_FORMAT_YUV420_SEMIPLANAR;
-        if ((format & 0xfffffff7) != 199) {
+        if ((format & 0xfffffff7) != AX_FORMAT_ARGB8888) {
           dstImgFormat = format;
         }
         (viMod->stPipelineAttr).tFilter[FilterChn][1].eDstPicFormat = dstImgFormat;
@@ -1887,9 +1813,9 @@ no_fit:
         (viMod->stPipelineAttr).tFilter[FilterChn][1].nDstPicHeight = u16DstHeight;
         (viMod->stPipelineAttr).tFilter[FilterChn][1].nDstPicStride = u16DstWidth;
         (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nX =
-             (short)(((int)(uVar13 - u32DstWidth) / 2) + 1U) & 0xfffe;
+             (short)(((int)(u32AdjWidth - u32DstWidth) / 2) + 1U) & 0xfffe;
         (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nY =
-             (short)(((int)(uVar8 - u32DstHeight) / 2) + 1U) & 0xfffe;
+             (short)(((int)(u32AdjHeight - u32DstHeight) / 2) + 1U) & 0xfffe;
       }
       uCurIvpsChn = 0;
       (viMod->stPipelineAttr).nOutFifoDepth[ch] = 1;
@@ -1899,37 +1825,37 @@ no_fit:
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eEngine = AX_IVPS_ENGINE_SCL;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eSclType = AX_IVPS_SCL_TYPE_AUTO;
       }
-      uVar8 = AX_IVPS_SetPipelineAttr(IvpsGrp,&viMod->stPipelineAttr);
-      if (uVar8 == 0) {
+      s32Ret = AX_IVPS_SetPipelineAttr(IvpsGrp,&viMod->stPipelineAttr);
+      if (s32Ret == 0) {
         do {
           if (viMod->stPipelineAttr.tFilter[uCurIvpsChn + 1][0].bEngage != AX_FALSE) {
-            uVar8 = AX_IVPS_EnableChn(viMod->nGrpId,(IVPS_CHN)uCurIvpsChn);
-            if (uVar8 != 0) {
+            s32Ret = AX_IVPS_EnableChn(viMod->nGrpId,(IVPS_CHN)uCurIvpsChn);
+            if (s32Ret != 0) {
               printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\x1b[0m\n"
                      ,"add_channel",__LINE__,(uint32_t)viMod->nGrpId,
-                     (uint32_t)uCurIvpsChn,uVar8);
+                     (uint32_t)uCurIvpsChn,s32Ret);
               goto failed;
             }
           }
           uCurIvpsChn = uCurIvpsChn + 1;
         } while (uCurIvpsChn != 5);
-        uVar8 = AX_IVPS_StartGrp(viMod->nGrpId);
-        if (uVar8 == 0) {
+        s32Ret = AX_IVPS_StartGrp(viMod->nGrpId);
+        if (s32Ret == 0) {
           axMod.unlock(AX_MOD_VI);
           return err::ERR_NONE;
         }
-        uVar13 = viMod->nGrpId;
+        nGrpId = viMod->nGrpId;
         pcError =
           "\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_StartGrp failed,nGrp %d,s32Ret:0x%x\x1b[0m\n";
         uLine = __LINE__;
       }
       else {
         uLine = __LINE__;
-        uVar13 = viMod->nGrpId;
+        nGrpId = viMod->nGrpId;
         pcError =
           "\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_SetPipelineAttr failed,nGrp %d,s32Ret:0x%x\x1b[0m\n";
       }
-      printf(pcError,"add_channel",uLine,(ulong)uVar13,(ulong)uVar8);
+      printf(pcError,"add_channel",uLine,nGrpId,s32Ret);
       goto failed;
     }
     pcError = "width and height must be greater than 32, current the width is %d, the height is %d";
@@ -1939,7 +1865,7 @@ no_fit:
       "width must be multiple of 16, height must be multiple of 2, current the width is %d, the height is %d"
     ;
   }
-  maix::log::error(pcError,(ulong)(uint)width,(ulong)(uint)height);
+  maix::log::error(pcError,width,height);
 failed:
   axMod.unlock(AX_MOD_VI);
   return err::ERR_RUNTIME;
@@ -1952,29 +1878,28 @@ err::Err VI::del_channel(int ch)
 
 {
   AX_S32 s32Ret;
-  uint u32Ret;
   int viChnNum;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vi_mod_t *viMod = (ax_vi_mod_t *)axMod.get_param(AX_MOD_VI);
   axMod.lock(AX_MOD_VI);
   s32Ret = AX_IVPS_StopGrp(viMod->nGrpId);
-  if ((s32Ret != 0) && (s32Ret != -0x7ff2feeb)) {
+  if ((s32Ret != 0) && (s32Ret != AX_ERR_IVPS_NOT_PERM)) {
     printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x\x1b[0m\n",
            "del_channel",__LINE__,(uint32_t)viMod->nGrpId,s32Ret);
   }
   if ((viMod->stPipelineAttr).tFilter[ch + 1][0].bEngage != AX_FALSE) {
-    u32Ret = AX_IVPS_DisableChn(viMod->nGrpId,ch);
-    if (u32Ret != 0) {
+    s32Ret = AX_IVPS_DisableChn(viMod->nGrpId,ch);
+    if (s32Ret != 0) {
       printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\x1b[0m\n"
              ,"del_channel",__LINE__,(uint32_t)viMod->nGrpId,(uint32_t)ch,
-             u32Ret);
+             s32Ret);
       axMod.unlock(AX_MOD_VI);
       return err::ERR_RUNTIME;
     }
     viChnNum = viMod->nChnNum;
     (viMod->stPipelineAttr).tFilter[ch + 1][0].bEngage = AX_FALSE;
-    viMod->nChnNum = viChnNum + -1;
+    viMod->nChnNum = viChnNum - 1;
   }
   axMod.unlock(AX_MOD_VI);
   return err::ERR_NONE;
@@ -1987,26 +1912,25 @@ err::Err VI::del_channel_all()
 
 {
   AX_S32 s32Ret;
-  uint u32Ret;
-  ulong curIvpsChn;
+  uint64_t curIvpsChn;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vi_mod_t *viMod = (ax_vi_mod_t *)axMod.get_param(AX_MOD_VI);
   axMod.lock(AX_MOD_VI);
   s32Ret = AX_IVPS_StopGrp(viMod->nGrpId);
-  if ((s32Ret != 0) && (s32Ret != -0x7ff2feeb)) {
+  if ((s32Ret != 0) && (s32Ret != AX_ERR_IVPS_NOT_PERM)) {
     printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x\x1b[0m\n",
            "del_channel_all",__LINE__,(uint32_t)viMod->nGrpId,s32Ret);
   }
   curIvpsChn = 0;
   do {
     if (viMod->stPipelineAttr.tFilter[curIvpsChn + 1][0].bEngage != AX_FALSE) {
-      u32Ret = AX_IVPS_DisableChn(viMod->nGrpId,(IVPS_CHN)curIvpsChn);
-      if (u32Ret != 0) {
+      s32Ret = AX_IVPS_DisableChn(viMod->nGrpId,(IVPS_CHN)curIvpsChn);
+      if (s32Ret != 0) {
         axMod.unlock(AX_MOD_VI);
         printf("\x1b[1;30;31mERROR  :[%s:%d] AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x\x1b[0m\n"
                ,"del_channel_all",__LINE__,(uint32_t)viMod->nGrpId,
-               (uint32_t)curIvpsChn,u32Ret);
+               (uint32_t)curIvpsChn,s32Ret);
         maix::err::check_raise(err::ERR_RUNTIME,"AX_IVPS_DisableChn failed");
       }
     }
@@ -2051,7 +1975,7 @@ maixcam2::Frame *VI::pop(int ch, int32_t timeout_ms)
       if (s32Ret != 0) {
         AX_IVPS_ReleaseChnFrame(IvpsGrp,ch,ptFrame);
         axMod.unlock(AX_MOD_VI);
-        maix::log::info(" ivps invert format failed, ret:%#x",(ulong)s32Ret);
+        maix::log::info(" ivps invert format failed, ret:%#x",s32Ret);
         goto failed;
       }
       eFrom = FRAME_FROM_SYS_MEM_ALLOC;
@@ -2076,7 +2000,7 @@ failed:
 maixcam2::Frame *VI::pop_raw(int ch, int32_t timeout_ms)
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   Frame *frame;
   AX_IMG_INFO_T stImgInfo;
 
@@ -2084,7 +2008,7 @@ maixcam2::Frame *VI::pop_raw(int ch, int32_t timeout_ms)
   s32Ret = AX_VIN_GetRawFrame(0,AX_VIN_PIPE_DUMP_NODE_IFE,AX_SNS_HDR_FRAME_L,&stImgInfo,
                               timeout_ms);
   if ((s32Ret != 0) &&
-     (maix::log::error("AX_VIN_GetRawFrame failed, ret:0x%x",(ulong)s32Ret), s32Ret == 0x80110122))
+     (maix::log::error("AX_VIN_GetRawFrame failed, ret:0x%x",s32Ret), s32Ret == AX_ERR_VIN_RES_EMPTY))
   {
     maix::err::check_raise(err::ERR_REOPEN,"Raw buffer empty");
   }
@@ -2243,14 +2167,14 @@ VO::VO()
   axMod.lock(AX_MOD_VO);
   initCount = voMod->init_count;
   if (initCount < 1) {
-    *(bool *)((long)(voMod->used_channels + 0) + 0) = false;
-    *(bool *)((long)(voMod->used_channels + 0) + 1) = false;
-    *(bool *)((long)(voMod->used_channels + 0) + 2) = false;
-    *(bool *)((long)(voMod->used_channels + 1) + 0) = false;
-    *(bool *)((long)(voMod->used_channels + 1) + 1) = false;
-    *(bool *)((long)(voMod->used_channels + 1) + 2) = false;
-    *(bool *)((long)(voMod->used_channels + 2) + 0) = false;
-    *(bool *)((long)(voMod->used_channels + 2) + 1) = false;
+    voMod->used_channels[0][0] = false;
+    voMod->used_channels[0][1] = false;
+    voMod->used_channels[0][2] = false;
+    voMod->used_channels[1][0] = false;
+    voMod->used_channels[1][1] = false;
+    voMod->used_channels[1][2] = false;
+    voMod->used_channels[2][0] = false;
+    voMod->used_channels[2][1] = false;
     voMod->used_channels[2][2] = false;
     memset(voMod->channel_param,0,sizeof(voMod->channel_param));
     initCount = 1;
@@ -2270,27 +2194,32 @@ err::Err VO::init(ax_vo_param_t *param)
 
 {
   ax_vo_param_t *pstVoConfig;
+  AX_U32 u32LayerWidth;
   AX_U32 u32LayerHeight;
   int initCount2;
   IVPS_GRP IvpsGrp;
-  AX_U32 AVar2;
+  AX_U32 u32LayerNr;
   AX_U16 u16DstWidth;
+  AX_U16 u16DstHeight;
   AX_IVPS_PIPELINE_ATTR_T *ptPipelineAttr;
-  uint uVar5;
+  AX_S32 s32Ret;
+  uint64_t uVoLayIndex;
   AX_POOL nPoolId;
-  long lVar7;
+  int64_t lTmpSize;
+  uint64_t uTmpSize;
   char *pcError;
-  uint uVar8;
-  ulong uVar9;
+  uint64_t uError;
+  uint64_t uBlkDiv;
   SAMPLE_VO_DEV_CONFIG_S *pTmpVoDev;
   err::Err uErr;
   AX_U32 u32BlkCnt;
-  ulong uVar11;
+  uint64_t uErrIdx;
+  uint64_t uVoDevIndex;
   SAMPLE_VO_DEV_CONFIG_S *pCurVoDev;
   AX_BOOL bVoDevWbcEn;
   SAMPLE_VO_GRAPHIC_CONFIG_S *pVoGraphic;
   SAMPLE_VO_LAYER_CONFIG_S *pCurVoLayer;
-  ulong uBlkSize;
+  uint64_t uBlkSize;
   AX_U32 winRow;
   AX_U32 winCol;
   AX_U32 winWidth;
@@ -2314,20 +2243,19 @@ success:
   pstVoConfig = &voMod->vo_param;
   memcpy(pstVoConfig,param,sizeof(*pstVoConfig));
   voMod->nGrpId = 1;
-  uVar5 = AX_VO_Init();
-  uVar9 = (ulong)uVar5;
-  if (uVar5 == 0) {
+  s32Ret = AX_VO_Init();
+  uError = s32Ret;
+  if (s32Ret == 0) {
     pVoDev = &voMod->vo_param.vo_cfg.stVoDev[0];
-    AVar2 = voMod->vo_param.vo_cfg.u32VDevNr;
+    u32LayerNr = voMod->vo_param.vo_cfg.u32VDevNr;
     if (voMod->vo_param.vo_cfg.u32BindMode != 0) {
-      AVar2 = 1;
+      u32LayerNr = 1;
     }
     bVoDevWbcEn = AX_FALSE;
-    voMod->vo_param.vo_cfg.u32LayerNr = AVar2;
+    voMod->vo_param.vo_cfg.u32LayerNr = u32LayerNr;
     pCurVoDev = pVoDev;
     pCurVoLayer = &voMod->vo_param.vo_cfg.stVoLayer[0];
-    for (uVar5 = 0; uVar8 = voMod->vo_param.vo_cfg.u32LayerNr, uVar5 < uVar8;
-        uVar5 = uVar5 + 1) {
+    for (uVoLayIndex = 0; uVoLayIndex < voMod->vo_param.vo_cfg.u32LayerNr; uVoLayIndex = uVoLayIndex + 1) {
       pCurVoLayer->u64KeepChnPrevFrameBitmap0 = 0xffffffffffffffff;
       pCurVoLayer->u64KeepChnPrevFrameBitmap1 = 0xffffffffffffffff;
       if (voMod->vo_param.vo_cfg.u32BindMode == 0) {
@@ -2335,13 +2263,12 @@ success:
         bVoDevWbcEn = pCurVoDev->bWbcEn;
       }
       else {
-        uVar8 = voMod->vo_param.vo_cfg.u32VDevNr;
-        lVar7 = 0;
+        uVoDevIndex = 0;
         pTmpVoDev = pVoDev;
-        while ((uint)lVar7 < uVar8) {
+        while (uVoDevIndex < voMod->vo_param.vo_cfg.u32VDevNr) {
           pNextVoDev = pTmpVoDev + 1;
-          pCurVoLayer->bindVoDev[lVar7] = pTmpVoDev->u32VoDev;
-          lVar7 = lVar7 + 1;
+          pCurVoLayer->bindVoDev[uVoDevIndex] = pTmpVoDev->u32VoDev;
+          uVoDevIndex = uVoDevIndex + 1;
           pbWbcEn = &pTmpVoDev->bWbcEn;
           pTmpVoDev = pNextVoDev;
           if (*pbWbcEn != AX_FALSE) {
@@ -2349,18 +2276,17 @@ success:
           }
         }
       }
-      AVar2 = (pCurVoLayer->stVoLayerAttr).stImageSize.u32Width;
+      u32LayerWidth = (pCurVoLayer->stVoLayerAttr).stImageSize.u32Width;
       u32LayerHeight = (pCurVoLayer->stVoLayerAttr).stImageSize.u32Height;
-      SAMPLE_VO_WIN_INFO(AVar2,u32LayerHeight,pCurVoLayer->enVoMode,&winRow,&winCol,&winWidth,
+      SAMPLE_VO_WIN_INFO(u32LayerWidth,u32LayerHeight,pCurVoLayer->enVoMode,&winRow,&winCol,&winWidth,
                          &winHeight);
-      lVar7 = (ulong)((AVar2 + 7) & 0xfffffff8) * (ulong)((u32LayerHeight + 1) & 0xfffffffe);
+      lTmpSize = (ulong)((u32LayerWidth + 7) & 0xfffffff8) * (ulong)((u32LayerHeight + 1) & 0xfffffffe);
       voLayerPixFmt = (pCurVoLayer->stVoLayerAttr).enPixFmt;
       if (AX_FORMAT_BGRA5658 < voLayerPixFmt) {
 format_failed:
         maix::log::info("not support fromat %d",voLayerPixFmt);
-        uVar11 = (ulong)uVar5;
-        uVar9 = (ulong)(uint)voMod->vo_param.vo_cfg.stVoLayer[uVar5].stVoLayerAttr.
-                             enPixFmt;
+        uErrIdx = uVoLayIndex;
+        uError = (uint32_t)voMod->vo_param.vo_cfg.stVoLayer[uVoLayIndex].stVoLayerAttr.enPixFmt;
         pcError = "SAMPLE_VO_FMT2ImgStoreInfo failed, i:%d, enPixFmt:0x%x\n";
         goto vo_start_failed;
       }
@@ -2369,7 +2295,7 @@ format_failed:
           if (voLayerPixFmt < AX_FORMAT_YUV420_SEMIPLANAR) goto format_failed;
         }
         else if (voLayerPixFmt != AX_FORMAT_YUV422_SEMIPLANAR) goto format_failed;
-        uVar9 = 2;
+        uBlkDiv = 2;
       }
       else {
         if ((0x1fffe000000063U >>
@@ -2377,17 +2303,17 @@ format_failed:
                            ~(AX_FORMAT_BAYER_RAW_8BPP|AX_FORMAT_YUV444_PACKED|
                              AX_FORMAT_YUV420_SEMIPLANAR_VU|AX_FORMAT_YUV420_SEMIPLANAR)) & 0x3f) &
             1) == 0) goto format_failed;
-        uVar9 = 1;
+        uBlkDiv = 1;
       }
       if (voLayerPixFmt == AX_FORMAT_YUV422_SEMIPLANAR) {
-        uVar11 = lVar7 * 4;
+        uTmpSize = lTmpSize * 4;
       }
       else {
-        uVar11 = lVar7 * 3;
+        uTmpSize = lTmpSize * 3;
       }
       uBlkSize = 0;
-      if (uVar9 != 0) {
-        uBlkSize = uVar11 / uVar9;
+      if (uBlkDiv != 0) {
+        uBlkSize = uTmpSize / uBlkDiv;
       }
       u32BlkCnt = 8;
       if (bVoDevWbcEn == AX_FALSE) {
@@ -2468,9 +2394,9 @@ format_failed:
       if (nPoolId == 0xffffffff) {
         maix::log::info("AX_POOL_CreatePool failed, u32BlkCnt = %d, u64BlkSize = 0x%llx, u64MetaSize = 0x%llx\n"
                         ,u32BlkCnt,uBlkSize,0x200);
-        uVar11 = uVar5;
+        uErrIdx = uVoLayIndex;
         pcError = "SAMPLE_VO_CREATE_POOL failed, i:%d, s32Ret:0x%x\n";
-        uVar9 = 0xffffffff;
+        uError = 0xffffffff;
         goto vo_start_failed;
       }
       maix::log::info("u32BlkCnt = %d, u64BlkSize = 0x%llx, pPoolID = %d\n",u32BlkCnt,uBlkSize,
@@ -2480,48 +2406,46 @@ format_failed:
       pCurVoLayer = pCurVoLayer + 1;
     }
     pVoGraphic = &voMod->vo_param.vo_cfg.stGraphicLayer[0];
-    for (uVar11 = 0; (uint)uVar11 < voMod->vo_param.vo_cfg.u32VDevNr; uVar11 = uVar11 + 1
+    for (uVoDevIndex = 0; uVoDevIndex < voMod->vo_param.vo_cfg.u32VDevNr; uVoDevIndex = uVoDevIndex + 1
         ) {
       if (pVoGraphic->u32FbNum != 0) {
-        ulong uFbIndex = 0;
-        pVoGraphic->bindVoDev = pVoDev[uVar11].u32VoDev;
+        uint64_t uFbIndex = 0;
+        pVoGraphic->bindVoDev = pVoDev[uVoDevIndex].u32VoDev;
         do {
-          uVar5 = __sample_fb_config((pstVoConfig->vo_cfg).stGraphicLayer[uVar11].stFbConf + uFbIndex,
-                                     uVar8);
-          uVar9 = (ulong)uVar5;
-          if (uVar5 != 0) {
+          s32Ret = (AX_S32)__sample_fb_config((pstVoConfig->vo_cfg).stGraphicLayer[uVoDevIndex].stFbConf + uFbIndex);
+          uError = s32Ret;
+          if (s32Ret != 0) {
             pcError = "SAMPLE_VO_FB_INIT failed, s32Ret:0x%x\n";
             goto failed;
           }
-          uVar5 = (int)uFbIndex + 1;
-          uFbIndex = (ulong)uVar5;
-          uVar8 = 0;
-        } while (uVar5 < pVoGraphic->u32FbNum);
+          uFbIndex = uFbIndex + 1;
+        } while (uFbIndex < pVoGraphic->u32FbNum);
       }
       pVoGraphic = pVoGraphic + 1;
     }
-    uVar5 = SAMPLE_COMM_VO_StartVO(&pstVoConfig->vo_cfg);
-    uVar9 = (ulong)uVar5;
-    if (uVar5 == 0) {
-      uVar5 = AX_IVPS_Init();
-      uVar9 = (ulong)uVar5;
-      if (uVar5 == 0) {
+    s32Ret = SAMPLE_COMM_VO_StartVO(&pstVoConfig->vo_cfg);
+    uError = s32Ret;
+    if (s32Ret == 0) {
+      s32Ret = AX_IVPS_Init();
+      uError = s32Ret;
+      if (s32Ret == 0) {
+        memset(&voMod->stGrpAttr,0,sizeof(voMod->stGrpAttr));
         voMod->stGrpAttr.nInFifoDepth = 2;
         IvpsGrp = voMod->nGrpId;
         voMod->stGrpAttr.ePipeline = AX_IVPS_PIPELINE_DEFAULT;
-        uVar5 = AX_IVPS_CreateGrp(IvpsGrp,&voMod->stGrpAttr);
-        uVar9 = (ulong)uVar5;
-        if (uVar5 == 0) {
+        s32Ret = AX_IVPS_CreateGrp(IvpsGrp,&voMod->stGrpAttr);
+        uError = s32Ret;
+        if (s32Ret == 0) {
           voMod->nChnNum = 1;
           memset(&voMod->stPipelineAttr,0,sizeof(voMod->stPipelineAttr));
           ptPipelineAttr = &voMod->stPipelineAttr;
           ptPipelineAttr->tFilter[1][0].bEngage = AX_TRUE;
           ptPipelineAttr->tFilter[1][0].eEngine = AX_IVPS_ENGINE_TDP;
           u16DstWidth = (AX_U16)(param->vo_cfg).stVoLayer[0].stVoLayerAttr.stImageSize.u32Width;
-          AVar2 = (param->vo_cfg).stVoLayer[0].stVoLayerAttr.stImageSize.u32Height;
+          u16DstHeight = (AX_U16)(param->vo_cfg).stVoLayer[0].stVoLayerAttr.stImageSize.u32Height;
           voMod->stPipelineAttr.tFilter[1][0].nDstPicWidth = u16DstWidth;
           voMod->init_count2 = 1;
-          voMod->stPipelineAttr.tFilter[1][0].nDstPicHeight = (AX_U16)AVar2;
+          voMod->stPipelineAttr.tFilter[1][0].nDstPicHeight = u16DstHeight;
           voMod->stPipelineAttr.tFilter[1][0].nDstPicStride = (u16DstWidth + 0xf) & 0xfff0;
           voMod->stPipelineAttr.tFilter[1][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR
           ;
@@ -2534,15 +2458,15 @@ format_failed:
       }
       goto failed;
     }
-    uVar11 = uVar11 & 0xffffffff;
+    uErrIdx = uVoDevIndex & 0xffffffff;
     pcError = "SAMPLE_COMM_VO_StartVO failed, i:%d, s32Ret:0x%x\n";
 vo_start_failed:
-    maix::log::error(pcError,uVar11,uVar9);
+    maix::log::error(pcError,uErrIdx,uError);
   }
   else {
     pcError = "AX_VO_Init failed, s32Ret = 0x%x\n";
 failed:
-    maix::log::error(pcError,uVar9);
+    maix::log::error(pcError,uError);
   }
   uErr = err::ERR_RUNTIME;
 done:
@@ -2585,41 +2509,24 @@ int VO::get_unused_channel(int layer)
 err::Err VO::get_channel_param(int layer, int ch, ax_vo_channel_param_t *param)
 
 {
-  int voFmtOut;
-  int voWidth;
-  int voHeight;
-  int voMirror;
-  int voFlip;
-  int voFps;
-  int voDepth;
   ax_vo_channel_param_t *voParam;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vo_mod_t *voMod = (ax_vo_mod_t *)axMod.get_param(AX_MOD_VO);
   axMod.lock(AX_MOD_VO);
   voParam = voMod->channel_param[layer] + ch;
-  voFmtOut = voParam->format_out;
-  voWidth = voParam->width;
-  voHeight = voParam->height;
-  voMirror = voParam->mirror;
-  voFlip = voParam->vflip;
-  voFps = voParam->fps;
-  voDepth = voParam->depth;
   param->format_in = voParam->format_in;
-  param->format_out = voFmtOut;
-  param->width = voWidth;
-  param->height = voHeight;
-  param->mirror = voMirror;
-  param->vflip = voFlip;
-  param->fps = voFps;
-  param->depth = voDepth;
-  voFmtOut = voParam->pool_num_out;
-  voWidth = voParam->fit;
-  voHeight = voParam->rotate;
+  param->format_out = voParam->format_out;
+  param->width = voParam->width;
+  param->height = voParam->height;
+  param->mirror = voParam->mirror;
+  param->vflip = voParam->vflip;
+  param->fps = voParam->fps;
+  param->depth = voParam->depth;
   param->pool_num_in = voParam->pool_num_in;
-  param->pool_num_out = voFmtOut;
-  param->fit = voWidth;
-  param->rotate = voHeight;
+  param->pool_num_out = voParam->pool_num_out;
+  param->fit = voParam->fit;
+  param->rotate = voParam->rotate;
   axMod.unlock(AX_MOD_VO);
   return err::ERR_NONE;
 }
@@ -2631,66 +2538,61 @@ err::Err VO::get_channel_param(int layer, int ch, ax_vo_channel_param_t *param)
 err::Err VO::add_channel(int layer, int ch, ax_vo_channel_param_t *param)
 
 {
-  int iVar1;
+  int FilterChn;
   ax_vo_channel_param_t *pChnParam;
   AX_U16 u16DstWidth;
+  AX_U16 u16DstHeight;
   IVPS_GRP nGrpId;
-  uint uCurIvpsGrp;
-  AX_U16 AVar6;
-  int iVar7;
+  uint32_t uCurIvpsGrp;
+  AX_U16 u16Tmp;
   int voMirror;
   int voFlip;
   int voFps;
   int voDepth;
   bool bParamFlip;
   bool bGlobalMirror;
-  uint s32Ret;
-  int iVar15;
+  AX_S32 s32Ret;
+  AX_S32 nChnNum;
+  AX_S32 s32Rotate;
   bool bGlobalFlip;
   char *pcError;
-  ulong uError;
-  AX_U16 u16NewHeight;
+  uint64_t uError;
   err::Err uErr;
   IVPS_CHN IvpsChn;
-  ulong uCurIvpsChn;
+  uint64_t uCurIvpsChn;
   AX_MOD_INFO_T tModSrc;
   AX_MOD_INFO_T tModDst;
   char caFbDevPath [32];
 
-  uCurIvpsChn = (ulong)(uint)layer;
+  uCurIvpsChn = layer;
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vo_mod_t *voMod = (ax_vo_mod_t *)axMod.get_param(AX_MOD_VO);
   axMod.lock(AX_MOD_VO);
   if (ch < 3) {
     if (voMod->used_channels[layer][ch] == false) {
-      iVar15 = param->format_out;
-      iVar1 = param->width;
-      iVar7 = param->height;
       voMirror = param->mirror;
       voFlip = param->vflip;
       voFps = param->fps;
       voDepth = param->depth;
       pChnParam = voMod->channel_param[layer] + ch;
       pChnParam->format_in = param->format_in;
-      pChnParam->format_out = iVar15;
-      pChnParam->width = iVar1;
-      pChnParam->height = iVar7;
+      pChnParam->format_out =  param->format_out;
+      pChnParam->width = param->width;
+      pChnParam->height = param->height;
       pChnParam->mirror = voMirror;
       pChnParam->vflip = voFlip;
       pChnParam->fps = voFps;
       pChnParam->depth = voDepth;
-      iVar15 = param->pool_num_out;
-      iVar1 = param->fit;
-      iVar7 = param->rotate;
       pChnParam->pool_num_in = param->pool_num_in;
-      pChnParam->pool_num_out = iVar15;
-      pChnParam->fit = iVar1;
-      pChnParam->rotate = iVar7;
+      pChnParam->pool_num_out = param->pool_num_out;
+      pChnParam->fit = param->fit;
+      pChnParam->rotate = param->rotate;
       if (layer == 1) {
+        int fbFd;
         snprintf(caFbDevPath,sizeof(caFbDevPath),"/dev/fb%d",(uint32_t)ch);
-        iVar15 = open(caFbDevPath,0x802);
-        if (-1 < iVar15) {
-          voMod->fb_fd[ch] = iVar15;
+        fbFd = open(caFbDevPath, O_NONBLOCK | O_RDWR);
+        if (-1 < fbFd) {
+          voMod->fb_fd[ch] = fbFd;
           goto success;
         }
         maix::log::error("open %s failed",caFbDevPath);
@@ -2716,59 +2618,59 @@ success:
         voMod->global_mirror = bGlobalMirror;
         voMod->global_flip = bGlobalFlip;
         s32Ret = AX_IVPS_StopGrp(voMod->nGrpId);
-        uCurIvpsChn = (ulong)s32Ret;
+        uCurIvpsChn = s32Ret;
         if (s32Ret == 0) {
 ivps_loop:
           while( true ) {
             nGrpId = voMod->nGrpId;
-            iVar15 = voMod->nChnNum;
+            nChnNum = voMod->nChnNum;
             IvpsChn = (IVPS_CHN)uCurIvpsChn;
-            if (iVar15 <= IvpsChn) break;
+            if (nChnNum <= IvpsChn) break;
             s32Ret = AX_IVPS_DisableChn(nGrpId,IvpsChn);
             if (s32Ret != 0) {
               uCurIvpsGrp = voMod->nGrpId;
               pcError = "AX_IVPS_DisableChn failed,nGrp %d,nChn %d,s32Ret:0x%x";
               goto ivps_chn_error;
             }
-            uCurIvpsChn = (ulong)(IvpsChn + 1);
+            uCurIvpsChn = (IvpsChn + 1);
           }
-          voMod->stPipelineAttr.nOutChnNum = (AX_U8)iVar15;
+          voMod->stPipelineAttr.nOutChnNum = (AX_U8)nChnNum;
           voMod->stPipelineAttr.tFilter[0][0].bEngage = AX_FALSE;
           voMod->stPipelineAttr.tFilter[0][0].eEngine = AX_IVPS_ENGINE_TDP;
-          iVar15 = param->rotate;
+          s32Rotate = param->rotate;
           u16DstWidth = (AX_U16)param->width;
-          AVar6 = (AX_U16)param->height;
-          if (iVar15 != 0x5a && iVar15 != 0x10e) {
+          u16Tmp = (AX_U16)param->height;
+          if (s32Rotate != 90 && s32Rotate != 270) {
             voMod->stPipelineAttr.tFilter[0][0].nDstPicWidth = (AX_U16)param->width;
-            u16NewHeight = AVar6;
+            u16DstHeight = u16Tmp;
           }
           else {
             voMod->stPipelineAttr.tFilter[0][0].nDstPicWidth = (AX_U16)param->height;
-            u16NewHeight = u16DstWidth;
+            u16DstHeight = u16DstWidth;
           }
           uCurIvpsChn = 0;
-          if (iVar15 == 0x5a || iVar15 == 0x10e) {
-            u16DstWidth = AVar6;
+          if (s32Rotate == 90 || s32Rotate == 270) {
+            u16DstWidth = u16Tmp;
           }
-          AVar6 = voMod->stPipelineAttr.tFilter[0][0].nDstPicWidth;
-          voMod->stPipelineAttr.tFilter[0][0].nDstPicHeight = u16NewHeight;
-          voMod->stPipelineAttr.tFilter[0][0].nDstPicStride = (AVar6 + 0xf) & 0xfff0;
+          u16Tmp = voMod->stPipelineAttr.tFilter[0][0].nDstPicWidth;
+          voMod->stPipelineAttr.tFilter[0][0].nDstPicHeight = u16DstHeight;
+          voMod->stPipelineAttr.tFilter[0][0].nDstPicStride = (u16Tmp + 0xf) & 0xfff0;
           voMod->stPipelineAttr.tFilter[0][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR
           ;
-          iVar1 = ch + 1;
-          voMod->stPipelineAttr.tFilter[iVar1][0].nDstPicWidth = u16DstWidth;
-          voMod->stPipelineAttr.tFilter[iVar1][0].nDstPicHeight = u16NewHeight;
-          voMod->stPipelineAttr.tFilter[iVar1][0].nDstPicStride =
+          FilterChn = ch + 1;
+          voMod->stPipelineAttr.tFilter[FilterChn][0].nDstPicWidth = u16DstWidth;
+          voMod->stPipelineAttr.tFilter[FilterChn][0].nDstPicHeight = u16DstHeight;
+          voMod->stPipelineAttr.tFilter[FilterChn][0].nDstPicStride =
                (voMod->stPipelineAttr.tFilter[1][0].nDstPicWidth + 0xf) & 0xfff0;
-          voMod->stPipelineAttr.tFilter[iVar1][0].tTdpCfg.eRotation =
-               (AX_IVPS_ROTATION_E)(iVar15 / 0x5a);
+          voMod->stPipelineAttr.tFilter[FilterChn][0].tTdpCfg.eRotation =
+               (AX_IVPS_ROTATION_E)(s32Rotate / 90);
           bGlobalFlip = voMod->global_flip;
-          voMod->stPipelineAttr.tFilter[iVar1][0].tTdpCfg.bMirror =
+          voMod->stPipelineAttr.tFilter[FilterChn][0].tTdpCfg.bMirror =
                (AX_BOOL)voMod->global_mirror;
-          voMod->stPipelineAttr.tFilter[iVar1][0].tTdpCfg.bFlip =
+          voMod->stPipelineAttr.tFilter[FilterChn][0].tTdpCfg.bFlip =
                (AX_BOOL)bGlobalFlip;
           s32Ret = AX_IVPS_SetPipelineAttr(nGrpId,&voMod->stPipelineAttr);
-          uError = (ulong)s32Ret;
+          uError = s32Ret;
           if (s32Ret == 0) {
 ivps_chn_enable:
             nGrpId = voMod->nGrpId;
@@ -2780,11 +2682,11 @@ ivps_chn_enable:
               uCurIvpsChn = uCurIvpsChn & 0xffffffff;
               pcError = "AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x";
 ivps_chn_error:
-              maix::log::error(pcError,(ulong)uCurIvpsGrp,uCurIvpsChn,(ulong)s32Ret);
+              maix::log::error(pcError,uCurIvpsGrp,uCurIvpsChn,s32Ret);
               goto ivps_failed;
             }
             s32Ret = AX_IVPS_StartGrp(nGrpId);
-            uError = (ulong)s32Ret;
+            uError = s32Ret;
             if (s32Ret == 0) {
               tModSrc.enModId = AX_ID_IVPS;
               tModSrc.s32GrpId = voMod->nGrpId;
@@ -2794,26 +2696,26 @@ ivps_chn_error:
               tModDst.s32ChnId = ch;
               s32Ret = AX_SYS_Link(&tModSrc,&tModDst);
               if (s32Ret != 0) {
-                maix::log::error("AX_SYS_Link failed, ret:0x%x\n",(ulong)s32Ret);
+                maix::log::error("AX_SYS_Link failed, ret:0x%x\n",s32Ret);
                 goto ivps_failed;
               }
               goto success;
             }
-            uCurIvpsChn = (ulong)(uint)voMod->nGrpId;
+            uCurIvpsChn = voMod->nGrpId;
             pcError = "AX_IVPS_StartGrp failed,nGrp %d,s32Ret:0x%x";
           }
           else {
-            uCurIvpsChn = (ulong)(uint)voMod->nGrpId;
+            uCurIvpsChn = voMod->nGrpId;
             pcError = "AX_IVPS_SetPipelineAttr failed,nGrp %d,s32Ret:0x%x";
           }
         }
         else {
-          uCurIvpsChn = (ulong)(uint)voMod->nGrpId;
-          if (s32Ret == 0x800d0115) {
+          uCurIvpsChn = voMod->nGrpId;
+          if (s32Ret == AX_ERR_IVPS_NOT_PERM) {
             uCurIvpsChn = 0;
             goto ivps_loop;
           }
-          uError = (ulong)s32Ret;
+          uError = s32Ret;
           pcError = "AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x";
         }
         maix::log::error(pcError,uCurIvpsChn,uError);
@@ -2822,12 +2724,12 @@ ivps_failed:
       uErr = err::ERR_RUNTIME;
       goto done;
     }
-    uCurIvpsChn = (ulong)(uint)ch;
+    uCurIvpsChn = ch;
     pcError = "channel %d already exist";
   }
   else {
     pcError = "channel %d is invalid";
-    uCurIvpsChn = (ulong)(uint)ch;
+    uCurIvpsChn = ch;
   }
 failed:
   uErr = err::ERR_ARGS;
@@ -2846,11 +2748,11 @@ ivps_chn_next:
 err::Err VO::del_channel(int layer, int ch)
 
 {
-  uint s32Ret;
-  int iVar2;
+  AX_S32 s32Ret;
+  int fbFd;
   void *__s;
   err::Err uErr;
-  ulong uCurIvpsChn;
+  uint64_t uCurIvpsChn;
   AX_MOD_INFO_T tSrcMod;
   AX_MOD_INFO_T tDstMod;
   fb_fix_screeninfo stFbFixInfo;
@@ -2859,25 +2761,25 @@ err::Err VO::del_channel(int layer, int ch)
   ax_vo_mod_t *voMod = (ax_vo_mod_t *)axMod.get_param(AX_MOD_VO);
   axMod.lock(AX_MOD_VO);
   if (layer == 1) {
-    iVar2 = ioctl(voMod->fb_fd[ch],FBIOGET_FSCREENINFO,&stFbFixInfo);
-    if (iVar2 < 0) {
+    s32Ret = ioctl(voMod->fb_fd[ch],FBIOGET_FSCREENINFO,&stFbFixInfo);
+    if (s32Ret < 0) {
       uErr = err::ERR_RUNTIME;
       maix::log::error("get fix screen info from fb%d failed\n",
-                       (ulong)(uint)voMod->fb_fd[ch]);
+                       voMod->fb_fd[ch]);
     }
     else {
       uErr = err::ERR_NONE;
     }
-    __s = mmap((void *)0x0,(ulong)stFbFixInfo.smem_len,3,1,voMod->fb_fd[ch],0);
+    __s = mmap(NULL, stFbFixInfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED ,voMod->fb_fd[ch],0);
     if (__s == (void *)0xffffffffffffffff) {
       uErr = err::ERR_RUNTIME;
-      maix::log::error("map fb%d failed\n",(ulong)(uint)voMod->fb_fd[ch]);
+      maix::log::error("map fb%d failed\n",voMod->fb_fd[ch]);
     }
-    memset(__s,0,(ulong)stFbFixInfo.smem_len);
-    munmap(__s,(ulong)stFbFixInfo.smem_len);
-    iVar2 = voMod->fb_fd[ch];
-    if (2 < iVar2) {
-      close(iVar2);
+    memset(__s,0,stFbFixInfo.smem_len);
+    munmap(__s,stFbFixInfo.smem_len);
+    fbFd = voMod->fb_fd[ch];
+    if (2 < fbFd) {
+      close(fbFd);
       voMod->fb_fd[ch] = -1;
     }
   }
@@ -2885,7 +2787,7 @@ err::Err VO::del_channel(int layer, int ch)
     if (layer != 2) {
       if (layer != 0) {
         uErr = err::ERR_ARGS;
-        maix::log::error("invalid layer %d",(ulong)(uint)layer);
+        maix::log::error("invalid layer %d",(uint32_t)layer);
         goto done;
       }
       tSrcMod.enModId = AX_ID_IVPS;
@@ -2896,7 +2798,7 @@ err::Err VO::del_channel(int layer, int ch)
       tDstMod.s32ChnId = ch;
       s32Ret = AX_SYS_UnLink(&tSrcMod,&tDstMod);
       if (s32Ret != 0) {
-        maix::log::error("AX_SYS_UnLink failed, ret:0x%x\n",(ulong)s32Ret);
+        maix::log::error("AX_SYS_UnLink failed, ret:0x%x\n",s32Ret);
       }
       s32Ret = AX_IVPS_StopGrp(voMod->nGrpId);
       if (s32Ret == 0) {
@@ -2905,7 +2807,7 @@ err::Err VO::del_channel(int layer, int ch)
             s32Ret = AX_IVPS_DisableChn(voMod->nGrpId,(int)uCurIvpsChn);
             if (s32Ret != 0) {
               maix::log::error("AX_IVPS_EnableChn failed,nGrp %d,nChn %d,s32Ret:0x%x",
-                               (ulong)(uint)voMod->nGrpId,uCurIvpsChn & 0xffffffff,(ulong)s32Ret
+                               voMod->nGrpId,uCurIvpsChn & 0xffffffff,s32Ret
                               );
             }
           }
@@ -2913,12 +2815,12 @@ err::Err VO::del_channel(int layer, int ch)
       }
       else {
         maix::log::error("AX_IVPS_StopGrp failed,nGrp %d,s32Ret:0x%x",
-                         (ulong)(uint)voMod->nGrpId,(ulong)s32Ret);
+                         voMod->nGrpId,s32Ret);
       }
       s32Ret = AX_VO_ClearChnBuf(0,ch,AX_TRUE);
       if (s32Ret != 0) {
-        maix::log::error("AX_VO_ClearChnBuf failed,nLayer %d,nChn %d,s32Ret:0x%x",0,(ulong)(uint)ch,
-                         (ulong)s32Ret);
+        maix::log::error("AX_VO_ClearChnBuf failed,nLayer %d,nChn %d,s32Ret:0x%x",0,ch,
+                         s32Ret);
       }
     }
     uErr = err::ERR_NONE;
@@ -2936,9 +2838,8 @@ err::Err VO::del_channel_all()
 
 {
   int iRet;
-  bool (*pbUsedChns) [3];
-  ulong uCurChn;
-  uint layer;
+  uint64_t uCurChn;
+  uint32_t layer;
   err::Err uErr;
 
   layer = 0;
@@ -2946,19 +2847,17 @@ err::Err VO::del_channel_all()
   ax_vo_mod_t *voMod = (ax_vo_mod_t *)axMod.get_param(AX_MOD_VO);
   axMod.lock(AX_MOD_VO);
   uErr = err::ERR_NONE;
-  pbUsedChns = voMod->used_channels;
   do {
     uCurChn = 0;
     do {
-      if (((*pbUsedChns)[uCurChn] != false) && (iRet = del_channel(layer,(int)uCurChn), iRet != 0))
+      if ((voMod->used_channels[layer][uCurChn] != false) && (iRet = del_channel(layer,(int)uCurChn), iRet != 0))
       {
         uErr = err::ERR_RUNTIME;
-        maix::log::error("delete layer %d channel %d failed!",(ulong)layer,uCurChn & 0xffffffff);
+        maix::log::error("delete layer %d channel %d failed!",layer,uCurChn & 0xffffffff);
       }
       uCurChn = uCurChn + 1;
     } while (uCurChn != 3);
     layer = layer + 1;
-    pbUsedChns = pbUsedChns + 1;
   } while (layer != 3);
   axMod.unlock(AX_MOD_VO);
   return uErr;
@@ -2970,44 +2869,44 @@ err::Err VO::del_channel_all()
 void VO::deinit()
 
 {
-  int iVar1;
-  uint s32Ret;
-  long lCurLayer;
+  int initCount2;
+  AX_S32 s32Ret;
+  uint64_t uCurLayer;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_vo_mod_t *voMod = (ax_vo_mod_t *)axMod.get_param(AX_MOD_VO);
   axMod.lock(AX_MOD_VO);
-  iVar1 = voMod->init_count2;
-  if (iVar1 < 2) {
-    if (iVar1 == 1) {
+  initCount2 = voMod->init_count2;
+  if (initCount2 < 2) {
+    if (initCount2 == 1) {
       axMod.unlock(AX_MOD_VO);
       del_channel_all();
       axMod.lock(AX_MOD_VO);
       s32Ret = AX_IVPS_DestoryGrp(voMod->nGrpId);
       if (s32Ret != 0) {
-        maix::log::error("AX_VO_DestoryGrp failed, s32Ret:0x%x\n",(ulong)s32Ret);
+        maix::log::error("AX_VO_DestoryGrp failed, s32Ret:0x%x\n",s32Ret);
       }
       s32Ret = AX_IVPS_Deinit();
       if (s32Ret != 0) {
-        maix::log::error("AX_IVPS_Deinit failed, s32Ret:0x%x\n",(ulong)s32Ret);
+        maix::log::error("AX_IVPS_Deinit failed, s32Ret:0x%x\n",s32Ret);
       }
       s32Ret = SAMPLE_COMM_VO_StopVO(&voMod->vo_param.vo_cfg);
       if (s32Ret != 0) {
-        maix::log::error("SAMPLE_COMM_VO_StopVO failed, s32Ret:0x%x\n",(ulong)s32Ret);
+        maix::log::error("SAMPLE_COMM_VO_StopVO failed, s32Ret:0x%x\n",s32Ret);
       }
-      for (lCurLayer = 0; (uint)lCurLayer < voMod->vo_param.vo_cfg.u32LayerNr; lCurLayer = lCurLayer + 1)
+      for (uCurLayer = 0; uCurLayer < voMod->vo_param.vo_cfg.u32LayerNr; uCurLayer = uCurLayer + 1)
       {
-        AX_POOL_DestroyPool(voMod->vo_param.vo_cfg.stVoLayer[lCurLayer].u32LayerPoolId);
+        AX_POOL_DestroyPool(voMod->vo_param.vo_cfg.stVoLayer[uCurLayer].u32LayerPoolId);
       }
       s32Ret = AX_VO_Deinit();
       if (s32Ret != 0) {
-        maix::log::error("AX_VO_Deinit failed, s32Ret:0x%x\n",(ulong)s32Ret);
+        maix::log::error("AX_VO_Deinit failed, s32Ret:0x%x\n",s32Ret);
       }
       voMod->init_count2 = 0;
     }
   }
   else {
-    voMod->init_count2 = iVar1 + -1;
+    voMod->init_count2 = initCount2 - 1;
   }
   axMod.unlock(AX_MOD_VO);
 }
@@ -3031,7 +2930,7 @@ VO::~VO()
     initCount = 0;
   }
   else {
-    initCount = initCount + -1;
+    initCount = initCount - 1;
   }
   voMod->init_count = initCount;
   axMod.unlock(AX_MOD_VO);
@@ -3044,7 +2943,7 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
 
 {
   AX_IVPS_ROTATION_E eRotation;
-  uint u32Tmp;
+  uint32_t u32Tmp;
   int iRet;
   char *pcError;
   void *pFbVirAddr;
@@ -3073,13 +2972,13 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
     if (iRet < 0) {
       uErr = err::ERR_RUNTIME;
       maix::log::error("get fix screen info from fb%d failed\n",
-                       (ulong)(uint)voMod->fb_fd[ch]);
+                       voMod->fb_fd[ch]);
     }
     else {
       uErr = err::ERR_NONE;
     }
     frame->get_video_frame(&stVideoFrame);
-    u32Tmp = (uint)voMod->global_flip;
+    u32Tmp = (uint32_t)voMod->global_flip;
     if (voMod->global_mirror == false) {
       eFlipMode = (AX_IVPS_CHN_FLIP_MODE_E)(u32Tmp << 1);
     }
@@ -3115,15 +3014,15 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
         u32FrameSize = stDstVideoFrame.u32FrameSize;
         pDstVirAddr = stDstVideoFrame.u64VirAddr[0];
         uDstPhyAddr = stDstVideoFrame.u64PhyAddr[0];
-        pFbVirAddr = mmap((void *)0x0,(ulong)stFbFixInfo.smem_len,3,1,voMod->fb_fd[ch],0)
+        pFbVirAddr = mmap(NULL, stFbFixInfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED ,voMod->fb_fd[ch],0)
         ;
         if (pFbVirAddr == (void *)0xffffffffffffffff) {
           uErr = err::ERR_RUNTIME;
-          maix::log::error("map fb%d failed\n",(ulong)(uint)voMod->fb_fd[ch]);
+          maix::log::error("map fb%d failed\n",voMod->fb_fd[ch]);
         }
         memcpy(pFbVirAddr,(void *)pDstVirAddr,(ulong)u32FrameSize);
         AX_SYS_MemFree(uDstPhyAddr,(AX_VOID *)pDstVirAddr);
-        munmap(pFbVirAddr,(ulong)stFbFixInfo.smem_len);
+        munmap(pFbVirAddr,stFbFixInfo.smem_len);
         goto done;
       }
       AX_SYS_MemFree(uPhyAddr,pVirAddr);
@@ -3132,7 +3031,7 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
     else {
       pcError = "AX_SYS_MemAllocCached failed, ret = %#x";
     }
-    maix::log::error(pcError,(ulong)u32Tmp);
+    maix::log::error(pcError,u32Tmp);
     maix::log::error("__ax_ivps_flip_rotation_tdp failed\n");
 failed:
     uErr = err::ERR_RUNTIME;
@@ -3141,15 +3040,15 @@ failed:
     if (layer != 2) {
       if (layer != 0) {
         uErr = err::ERR_ARGS;
-        maix::log::error("invalid layer %d",(ulong)(uint)layer);
+        maix::log::error("invalid layer %d",(uint32_t)layer);
         goto done;
       }
       memset(&stDstVideoFrame,0,sizeof(stDstVideoFrame));
       frame->get_video_frame(&stDstVideoFrame);
       u32Tmp = AX_IVPS_SendFrame(voMod->nGrpId,&stDstVideoFrame,-1);
       if (u32Tmp != 0) {
-        maix::log::error("layer%d-chn%d AX_IVPS_SendFrame failed, s32Ret = 0x%x\n",0,(ulong)(uint)ch
-                         ,(ulong)u32Tmp);
+        maix::log::error("layer%d-chn%d AX_IVPS_SendFrame failed, s32Ret = 0x%x\n",0,ch
+                         ,u32Tmp);
         goto failed;
       }
     }
@@ -3167,12 +3066,13 @@ VENC::VENC(ax_venc_param_t *cfg)
 
 {
   bool bEn;
+  int initCount;
   int s32Tmp;
-  uint s32Ret;
+  AX_S32 s32Ret;
   long lCurChn;
   AX_VENC_RECV_PIC_PARAM_T stVencRecvParam [2];
   AX_VENC_MOD_ATTR_T stVencModAttr;
-  ulong u32Gop;
+  AX_U32 u32Gop;
   AX_U32 u32BitRate;
   AX_U32 u32MaxQp;
   AX_U32 u32MinQp;
@@ -3188,8 +3088,8 @@ VENC::VENC(ax_venc_param_t *cfg)
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_venc_mod_t *vencMod = (ax_venc_mod_t *)axMod.get_param(AX_MOD_VENC);
   axMod.lock(AX_MOD_VENC);
-  s32Tmp = vencMod->init_count;
-  if (s32Tmp < 1) {
+  initCount = vencMod->init_count;
+  if (initCount < 1) {
     stVencModAttr.stModThdAttr.enSchedPolicy = AX_VENC_SCHED_OTHER;
     stVencModAttr.stModThdAttr.u32SchedPriority = 0;
     stVencModAttr.enVencType = AX_VENC_MULTI_ENCODER;
@@ -3198,15 +3098,15 @@ VENC::VENC(ax_venc_param_t *cfg)
     s32Ret = AX_VENC_Init(&stVencModAttr);
     if (s32Ret != 0) {
       axMod.unlock(AX_MOD_VENC);
-      maix::log::info(" venc init failed, ret:%#x",(ulong)s32Ret);
+      maix::log::info(" venc init failed, ret:%#x",s32Ret);
       maix::err::check_raise(err::ERR_RUNTIME,"venc init failed");
     }
-    s32Tmp = 1;
+    initCount = 1;
   }
   else {
-    s32Tmp = s32Tmp + 1;
+    initCount = initCount + 1;
   }
-  vencMod->init_count = s32Tmp;
+  vencMod->init_count = initCount;
   if (cfg == (ax_venc_param_t *)0x0) {
     this->_ch = -1;
   }
@@ -3262,7 +3162,7 @@ venc_init:
       u32Gop = cfg->h264.gop;
       stVencChnAttr.stRcAttr.stH264Cbr.u32BitRate = u32BitRate;
       stVencChnAttr.stRcAttr.stH264Cbr.u32MaxQp = u32MaxQp;
-      stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = (uint32_t)u32Gop;
+      stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = u32Gop;
       stVencChnAttr.stRcAttr.stH264Cbr.u32StatTime = 0;
       stVencChnAttr.stRcAttr.stH264Cbr.u32MinIQp = u32MinIQp;
       stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIprop = u32MaxIprop;
@@ -3301,7 +3201,7 @@ venc_init:
       stVencChnAttr.stRcAttr.stH264Cbr.u32MaxIQp = u32MaxIQp;
       stVencChnAttr.stRcAttr.stH264Cbr.u32BitRate = u32BitRate;
       stVencChnAttr.stRcAttr.stH264Cbr.u32MaxQp = u32MaxQp;
-      stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = (uint32_t)u32Gop;
+      stVencChnAttr.stRcAttr.stH264Cbr.u32Gop = u32Gop;
       stVencChnAttr.stRcAttr.stH264Cbr.u32StatTime = 0;
       stVencChnAttr.stRcAttr.stH264Cbr.u32IdrQpDeltaRange = u32IdrQpDeltaRange;
       stVencChnAttr.stRcAttr.stH264Cbr.s32DeBreathQpDelta = cfg->h265.de_breath_qp_delta;
@@ -3327,13 +3227,13 @@ venc_init:
     s32Ret = AX_VENC_CreateChn(this->_ch,&stVencChnAttr);
     if (s32Ret != 0) {
       axMod.unlock(AX_MOD_VENC);
-      maix::log::info("VencChn %d: AX_VENC_CreateChn failed, s32Ret:0x%x",(ulong)(uint)this->_ch);
+      maix::log::info("VencChn %d: AX_VENC_CreateChn failed, s32Ret:0x%x",this->_ch);
       maix::err::check_raise(err::ERR_RUNTIME,"venc create channel failed");
     }
     s32Ret = AX_VENC_StartRecvFrame(this->_ch,stVencRecvParam);
     if (s32Ret != 0) {
       axMod.unlock(AX_MOD_VENC);
-      maix::log::error("AX_VENC_StartRecvFrame failed, ch:%d s32Ret:0x%x",(ulong)(uint)this->_ch);
+      maix::log::error("AX_VENC_StartRecvFrame failed, ch:%d s32Ret:0x%x",this->_ch);
       maix::err::check_raise(err::ERR_RUNTIME,"start recv frame failed");
     }
     s32Tmp = this->_ch;
@@ -3374,8 +3274,9 @@ venc_init:
 VENC::~VENC()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   ax_venc_param_t *pVencParam;
+  int initCount;
   int s32Tmp;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -3386,13 +3287,13 @@ VENC::~VENC()
     if (vencMod->venc[s32Tmp].en != false) {
       s32Ret = AX_VENC_StopRecvFrame(s32Tmp);
       if (s32Ret != 0) {
-        maix::log::error("AX_VENC_StopRecvFrame(%d) failed, ret=%#x",(ulong)(uint)this->_ch,
-                         (ulong)s32Ret);
+        maix::log::error("AX_VENC_StopRecvFrame(%d) failed, ret=%#x",this->_ch,
+                         s32Ret);
       }
       s32Ret = AX_VENC_DestroyChn(this->_ch);
       if (s32Ret != 0) {
-        maix::log::error("AX_VENC_DestroyChn(%d) failed, ret=%#x\n",(ulong)(uint)this->_ch,
-                         (ulong)s32Ret);
+        maix::log::error("AX_VENC_DestroyChn(%d) failed, ret=%#x\n",this->_ch,
+                         s32Ret);
       }
     }
     s32Tmp = this->_ch;
@@ -3422,18 +3323,18 @@ VENC::~VENC()
     vencMod->venc[s32Tmp].h265.qp_map_type = AX_VENC_QPMAP_QP_DISABLE;
     vencMod->venc[s32Tmp].h265.qp_map_blk_type = AX_VENC_QPMAP_BLOCK_DISABLE;
   }
-  s32Tmp = vencMod->init_count;
-  if (s32Tmp < 2) {
+  initCount = vencMod->init_count;
+  if (initCount < 2) {
     s32Ret = AX_VENC_Deinit();
     if (s32Ret != 0) {
-      maix::log::error("AX_VENC_Deinit failed, ret=%d\n",(ulong)(uint)this->_ch,(ulong)s32Ret);
+      maix::log::error("AX_VENC_Deinit failed, ret=%d\n",this->_ch,s32Ret);
     }
-    s32Tmp = 0;
+    initCount = 0;
   }
   else {
-    s32Tmp = s32Tmp + -1;
+    initCount = initCount - 1;
   }
-  vencMod->init_count = s32Tmp;
+  vencMod->init_count = initCount;
   axMod.unlock(AX_MOD_VENC);
 }
 
@@ -3496,7 +3397,7 @@ err::Err VENC::push(maixcam2::Frame *frame, int32_t timeout_ms)
       s32Ret = AX_VENC_SendFrame(this->_ch,pstFrame,timeout_ms);
       if ((short)s32Ret != 0) {
         iErr = err::ERR_RUNTIME;
-        maix::log::error("AX_VENC_SendFrame failed! ch:%d ret:%#x",(ulong)(uint)this->_ch);
+        maix::log::error("AX_VENC_SendFrame failed! ch:%d ret:%#x",this->_ch);
       }
     }
     else {
@@ -3581,12 +3482,13 @@ err::Err VENC::get_config(ax_venc_param_t *cfg)
 VDEC::VDEC(ax_vdec_param_t *cfg)
 
 {
-  uint uWidth;
-  uint uTmpSize;
-  uint s32Ret;
+  uint32_t u32Width;
+  uint32_t u32TmpSize;
+  uint32_t u32BlkSize;
+  AX_S32 s32Ret;
   char *pcLog;
   long curVdecChn;
-  ulong uTmp;
+  uint64_t uTmp;
   AX_PAYLOAD_TYPE_E vdecPayloadType;
   AX_VDEC_MOD_ATTR_T stVdecModAttr [2];
   AX_VDEC_RECV_PIC_PARAM_T stVdecRecvParam;
@@ -3689,7 +3591,7 @@ VDEC::VDEC(ax_vdec_param_t *cfg)
       if (u32Tmp < 1) {
         stVdecModAttr[0].u32MaxGroupCount = 16;
         s32Ret = AX_VDEC_Init(stVdecModAttr);
-        uTmp = (ulong)s32Ret;
+        uTmp = s32Ret;
         if (s32Ret == 0) {
           u32Tmp = 1;
           goto vdec_init;
@@ -3726,14 +3628,14 @@ vdec_setup:
             }
             stPoolConfig.BlkCnt = u32Tmp;
             if (cfg->blk_size == 0) {
-              s32Ret = cfg->h + 0xf;
-              uWidth = cfg->w + 0xf;
-              uTmpSize = (s32Ret & 0xfffffff0) * (uWidth & 0xfffffff0) * 3;
-              s32Ret = (s32Ret >> 4) * (uWidth >> 4) * 0x40 + 0x20 + (uTmpSize >> 1);
+              u32BlkSize = cfg->h + 0xf;
+              u32Width = cfg->w + 0xf;
+              u32TmpSize = (u32BlkSize & 0xfffffff0) * (u32Width & 0xfffffff0) * 3;
+              u32BlkSize = (u32BlkSize >> 4) * (u32Width >> 4) * 0x40 + 0x20 + (u32TmpSize >> 1);
               if (vdecPayloadType == PT_JPEG) {
-                s32Ret = uTmpSize;
+                u32BlkSize = u32TmpSize;
               }
-              stPoolConfig.BlkSize = (AX_U64)s32Ret;
+              stPoolConfig.BlkSize = (AX_U64)u32BlkSize;
             }
             else {
               stPoolConfig.BlkSize = (AX_U64)cfg->blk_size;
@@ -3773,28 +3675,28 @@ vdec_setup:
                   return;
                 }
                 maix::log::error("VdGrp=%d, AX_VDEC_StartRecvFrame FAILED! ret:0x%x\n",
-                                 (ulong)(uint)this->_ch);
+                                 this->_ch);
                 if (cfg->pool_id != 0xffffffff) {
                   AX_VDEC_DetachPool(this->_ch);
                 }
               }
               else {
                 maix::log::info(" VdGrp=%d, AX_VDEC_AttachPool FAILED! PoolId:%d ret:0x%x",
-                                (ulong)(uint)this->_ch,(ulong)cfg->pool_id,(ulong)s32Ret);
+                                this->_ch,cfg->pool_id,s32Ret);
               }
             }
           }
           else {
-            maix::log::error("VdGrp=%d, AX_VDEC_CreateGrp FAILED! ret:0x%x\n",(ulong)(uint)vdecGrp);
-            if (s32Ret == 0x80080180) {
+            maix::log::error("VdGrp=%d, AX_VDEC_CreateGrp FAILED! ret:0x%x\n",(uint32_t)vdecGrp);
+            if (s32Ret == AX_ERR_VDEC_RUN_ERROR) {
               maix::log::error("VdGrp=%d, u32PicWidth:%d u32PicHeight:%d u32FrameBufCnt:%d ret:0x%x\n"
-                               ,(ulong)(uint)vdecGrp,stVdecGrpAttr.u32PicHeight,
+                               ,(uint32_t)vdecGrp,stVdecGrpAttr.u32PicHeight,
                                stVdecGrpAttr.u32FrameBufCnt);
             }
-            else if (s32Ret == 0x80080116) {
+            else if (s32Ret == AX_ERR_VDEC_EXIST) {
               s32Ret = AX_VDEC_DestroyGrp(vdecGrp);
               if (s32Ret != 0) {
-                maix::log::error("VdGrp=%d, AX_VDEC_DestroyGrp FAILED! ret:%#x",(ulong)(uint)vdecGrp
+                maix::log::error("VdGrp=%d, AX_VDEC_DestroyGrp FAILED! ret:%#x",(uint32_t)vdecGrp
                                 );
               }
             }
@@ -3817,7 +3719,7 @@ vdec_setup:
           uTmp = 0;
         }
         else {
-          uTmp = (ulong)(u32Tmp - 1);
+          uTmp = (u32Tmp - 1);
         }
         pcLog = " vdec init count:%d";
         vdecMod->init_count = (int)uTmp;
@@ -3840,8 +3742,9 @@ VDEC::~VDEC()
 
 {
   AX_POOL PoolId;
-  uint s32Ret;
+  AX_S32 s32Ret;
   ax_vdec_param_t *pVdecParam;
+  int initCount;
   int s32Tmp;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -3853,41 +3756,41 @@ VDEC::~VDEC()
       s32Ret = AX_VDEC_DetachPool(s32Ret);
       if (s32Ret != 0) {
         maix::log::error("VdGrp=%d, AX_VDEC_DetachPool FAILED! PoolId:%d ret:0x%x",
-                         (ulong)(uint)this->_ch,
-                         (ulong)vdecMod->vdec[this->_ch].pool_id,(ulong)s32Ret);
+                         this->_ch,
+                         vdecMod->vdec[this->_ch].pool_id,s32Ret);
       }
     }
     s32Ret = AX_VDEC_StopRecvStream(this->_ch);
     if (s32Ret != 0) {
-      maix::log::error("VdGrp=%d, AX_VDEC_StopRecvStream FAILED! ret:0x%x",(ulong)(uint)this->_ch,
-                       (ulong)s32Ret);
+      maix::log::error("VdGrp=%d, AX_VDEC_StopRecvStream FAILED! ret:0x%x",this->_ch,
+                       s32Ret);
     }
     s32Ret = AX_VDEC_DestroyGrp(this->_ch);
     if (s32Ret != 0) {
-      maix::log::error("VdGrp=%d, AX_VDEC_DestroyGrp FAILED! ret:0x%x",(ulong)(uint)this->_ch,
-                       (ulong)s32Ret);
+      maix::log::error("VdGrp=%d, AX_VDEC_DestroyGrp FAILED! ret:0x%x",this->_ch,
+                       s32Ret);
     }
     PoolId = vdecMod->vdec[this->_ch].pool_id;
     if (PoolId != 0xffffffff) {
       s32Ret = AX_POOL_DestroyPool(PoolId);
       if (s32Ret != 0) {
         maix::log::error("VdGrp=%d, AX_POOL_DestroyPool FAILED! PoolId:%d ret:0x%x",
-                         (ulong)(uint)this->_ch,
-                         (ulong)vdecMod->vdec[this->_ch].pool_id,(ulong)s32Ret);
+                         this->_ch,
+                         vdecMod->vdec[this->_ch].pool_id,s32Ret);
       }
     }
   }
-  s32Tmp = vdecMod->init_count;
-  if (s32Tmp < 2) {
+  initCount = vdecMod->init_count;
+  if (initCount < 2) {
     s32Ret = AX_VDEC_Deinit();
     if (s32Ret != 0) {
-      maix::log::error("AX_VDEC_Deinit FAILED! ret:0x%x",(ulong)s32Ret);
+      maix::log::error("AX_VDEC_Deinit FAILED! ret:0x%x",s32Ret);
     }
     vdecMod->init_count = 0;
     maix::log::info(" vdec init count:%d",0);
   }
   else {
-    vdecMod->init_count = s32Tmp + -1;
+    vdecMod->init_count = initCount - 1;
   }
   s32Tmp = this->_ch;
   pVdecParam = vdecMod->vdec + s32Tmp;
@@ -3934,11 +3837,11 @@ err::Err VDEC::push(maixcam2::Frame *frame, int32_t timeout_ms)
     if ((short)s32Ret == 0) {
       return err::ERR_NONE;
     }
-    maix::log::error("AX_VDEC_SendFrame failed! ch:%d ret:%#x",(ulong)(uint)this->_ch);
+    maix::log::error("AX_VDEC_SendFrame failed! ch:%d ret:%#x",this->_ch);
   }
   else {
     from = frame->from();
-    maix::log::info("vdec push is not support frame from %d",(ulong)from);
+    maix::log::info("vdec push is not support frame from %d",(uint32_t)from);
   }
   return err::ERR_RUNTIME;
 }
@@ -3953,37 +3856,37 @@ maixcam2::Frame * VDEC::pop(int32_t timeout_ms)
   AX_S32 s32Ret;
   Frame *frame;
   char *pcError;
-  ulong uError;
+  uint64_t uError;
   AX_VIDEO_FRAME_INFO_T stFrameInfo;
 
   memset(&stFrameInfo,0,sizeof(stFrameInfo));
   s32Ret = AX_VDEC_GetFrame(this->_ch,&stFrameInfo,timeout_ms);
-  if (s32Ret == -0x7ff7fede) {
-    uError = (ulong)(uint)this->_ch;
+  if (s32Ret == AX_ERR_VDEC_QUEUE_EMPTY) {
+    uError = this->_ch;
     pcError = "VdGrp=%d, AX_VDEC_GetFrame AX_ERR_VDEC_QUEUE_EMPTY";
   }
-  else if (s32Ret < -0x7ff7fedd) {
-    if (s32Ret == -0x7ff7feeb) {
-      uError = (ulong)(uint)this->_ch;
+  else if (s32Ret < AX_ERR_VDEC_QUEUE_FULL) {
+    if (s32Ret == AX_ERR_VDEC_NOT_PERM) {
+      uError = this->_ch;
       pcError = "VdGrp=%d, AX_VDEC_GetFrame AX_ERR_VDEC_NOT_PERM";
     }
     else {
-      if (s32Ret != -0x7ff7fee9) goto failed;
-      uError = (ulong)(uint)this->_ch;
+      if (s32Ret != AX_ERR_VDEC_UNEXIST) goto failed;
+      uError = this->_ch;
       pcError = "VdGrp=%d, AX_VDEC_GetFrame AX_ERR_VDEC_UNEXIST";
     }
   }
   else {
-    if (s32Ret != -0x7ff7fed8) {
+    if (s32Ret != AX_ERR_VDEC_FLOW_END) {
       if (s32Ret == 0) {
         frame = new Frame(this->_ch,&stFrameInfo,FRAME_FROM_VDEC_GET_STREAM);
         return frame;
       }
 failed:
-      maix::log::error("VdGrp=%d, AX_VDEC_GetFrame FAILED! ret=0x%x\n",(ulong)(uint)this->_ch);
+      maix::log::error("VdGrp=%d, AX_VDEC_GetFrame FAILED! ret=0x%x\n",this->_ch);
       return (Frame *)0x0;
     }
-    uError = (ulong)(uint)this->_ch;
+    uError = this->_ch;
     pcError = "VdGrp=%d, AX_VDEC_GetFrame AX_ERR_VDEC_FLOW_END";
   }
   maix::log::error(pcError,uError);
@@ -4059,7 +3962,7 @@ AudioIn::AudioIn(ax_audio_in_param_t *cfg)
 err::Err AudioIn::deinit()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_ai_mod_t *aiMod = (ax_ai_mod_t *)axMod.get_param(AX_MOD_AI);
@@ -4201,8 +4104,8 @@ float AudioIn::volume(float volume)
 int AudioIn::period_size(int size)
 
 {
-  uint s32Ret;
-  ulong uRet;
+  AX_S32 s32Ret;
+  uint64_t uRet;
   AX_AI_ATTR_T stAiAttr;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -4217,15 +4120,15 @@ done:
     }
     stAiAttr.u32PeriodSize = size;
     s32Ret = AX_AI_SetPubAttr(aiMod->card,aiMod->device,&stAiAttr);
-    uRet = (ulong)s32Ret;
+    uRet = s32Ret;
     if (s32Ret == 0) {
       s32Ret = AX_AI_GetPubAttr(aiMod->card,aiMod->device,&stAiAttr);
-      uRet = (ulong)s32Ret;
+      uRet = s32Ret;
       if (s32Ret == 0) goto done;
     }
   }
   else {
-    uRet = (ulong)s32Ret;
+    uRet = s32Ret;
   }
   maix::log::error("AX_AI_GetPubAttr audio_failed! ret= %x",uRet);
   axMod.unlock(AX_MOD_AI);
@@ -4239,8 +4142,8 @@ done:
 int AudioIn::period_count(int count)
 
 {
-  uint s32Ret;
-  ulong uRet;
+  AX_S32 s32Ret;
+  uint64_t uRet;
   AX_AI_ATTR_T stAiAttr;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -4255,15 +4158,15 @@ done:
     }
     stAiAttr.u32PeriodCount = count;
     s32Ret = AX_AI_SetPubAttr(aiMod->card,aiMod->device,&stAiAttr);
-    uRet = (ulong)s32Ret;
+    uRet = s32Ret;
     if (s32Ret == 0) {
       s32Ret = AX_AI_GetPubAttr(aiMod->card,aiMod->device,&stAiAttr);
-      uRet = (ulong)s32Ret;
+      uRet = s32Ret;
       if (s32Ret == 0) goto done;
     }
   }
   else {
-    uRet = (ulong)s32Ret;
+    uRet = s32Ret;
   }
   maix::log::error("AX_AI_GetPubAttr audio_failed! ret= %x",uRet);
   axMod.unlock(AX_MOD_AI);
@@ -4298,12 +4201,12 @@ err::Err AudioOut::init()
   AX_POOL PoolId;
   err::Err uErr;
   int iRet;
-  uint s32Ret;
+  AX_S32 s32Ret;
   char *pcError;
-  ulong uError;
+  uint64_t uError;
   AX_AUDIO_SAMPLE_RATE_E audioSampleRate;
   uint64_t vqeAggressivenessLevel;
-  uint vqeAgcMode;
+  uint32_t vqeAgcMode;
   AX_S16 vqeTargetLevel;
   AX_S16 vqeGain;
   AX_ACODEC_FREQ_ATTR_T stHpfAttr;
@@ -4585,11 +4488,11 @@ dev_enable:
                   axMod.unlock(AX_MOD_AO);
                   return err::ERR_NONE;
                 }
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_AO_EnableResample audio_failed! ret = %#x";
               }
               else {
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_AO_EnableDev audio_failed! ret = %#x";
               }
             }
@@ -4608,11 +4511,11 @@ eq_enable:
               if (s32Ret == 0) {
                 s32Ret = AX_ACODEC_TxEqEnable(aoMod->card);
                 if (s32Ret == 0) goto dev_enable;
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_ACODEC_TxEqEnable audio_failed! ret = %#x";
               }
               else {
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_ACODEC_TxEqSetAttr audio_failed! ret = %#x";
               }
             }
@@ -4629,11 +4532,11 @@ lpf_enable:
             if (s32Ret == 0) {
               s32Ret = AX_ACODEC_TxLpfEnable(aoMod->card);
               if (s32Ret == 0) goto eq_init;
-              uError = (ulong)s32Ret;
+              uError = s32Ret;
               pcError = "AX_ACODEC_TxLpfEnable audio_failed! ret = %#x";
             }
             else {
-              uError = (ulong)s32Ret;
+              uError = s32Ret;
               pcError = "AX_ACODEC_TxLpfSetAttr audio_failed! ret = %#x";
             }
           }
@@ -4650,27 +4553,27 @@ hpf_enable:
           if (s32Ret == 0) {
             s32Ret = AX_ACODEC_TxHpfEnable(aoMod->card);
             if (s32Ret == 0) goto lpf_init;
-            uError = (ulong)s32Ret;
+            uError = s32Ret;
             pcError = "AX_ACODEC_TxHpfEnable audio_failed! ret = %#x";
           }
           else {
-            uError = (ulong)s32Ret;
+            uError = s32Ret;
             pcError = "AX_ACODEC_TxHpfSetAttr audio_failed! ret = %#x";
           }
         }
       }
       else {
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         pcError = "AX_AO_SetDnVqeAttr audio_failed! ret = %#x";
       }
     }
     else {
-      uError = (ulong)s32Ret;
+      uError = s32Ret;
       pcError = "AX_AO_SetPubAttr audio_failed! ret = %#x";
     }
   }
   else {
-    uError = (ulong)s32Ret;
+    uError = s32Ret;
     pcError = "AX_AO_Init FAILED! ret:0x%x";
   }
   uErr = err::ERR_NONE;
@@ -4682,19 +4585,19 @@ done:
   if (aoMod->eq_en != false) {
     s32Ret = AX_ACODEC_TxEqDisable(aoMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_TxEqDisable audio_failed! ret= %x",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_TxEqDisable audio_failed! ret= %x",s32Ret);
     }
   }
   if (aoMod->lpf_en != false) {
     s32Ret = AX_ACODEC_TxLpfDisable(aoMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_TxLpfDisable audio_failed! ret= %x\n",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_TxLpfDisable audio_failed! ret= %x\n",s32Ret);
     }
   }
   if (aoMod->hpf_en != false) {
     s32Ret = AX_ACODEC_TxHpfDisable(aoMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_TxHpfDisable audio_failed! ret= %x\n",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_TxHpfDisable audio_failed! ret= %x\n",s32Ret);
     }
   }
   axMod.unlock(AX_MOD_AO);
@@ -4708,7 +4611,7 @@ done:
 err::Err AudioOut::deinit()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
   ax_ao_mod_t *aoMod = (ax_ao_mod_t *)axMod.get_param(AX_MOD_AO);
@@ -4829,7 +4732,7 @@ float AudioOut::volume(float volume)
 err::Err AudioOut::pause()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err uErr;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -4841,7 +4744,7 @@ err::Err AudioOut::pause()
   }
   else {
     uErr = err::ERR_RUNTIME;
-    maix::log::error("AX_AO_PauseRecvFrame audio_failed! ret = %#x",(ulong)s32Ret);
+    maix::log::error("AX_AO_PauseRecvFrame audio_failed! ret = %#x",s32Ret);
   }
   axMod.unlock(AX_MOD_AO);
   return uErr;
@@ -4854,7 +4757,7 @@ err::Err AudioOut::pause()
 err::Err AudioOut::resume()
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err uErr;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -4866,7 +4769,7 @@ err::Err AudioOut::resume()
   }
   else {
     uErr = err::ERR_RUNTIME;
-    maix::log::error("AX_AO_ResumeRecvFrame audio_failed! ret = %#x",(ulong)s32Ret);
+    maix::log::error("AX_AO_ResumeRecvFrame audio_failed! ret = %#x",s32Ret);
   }
   axMod.unlock(AX_MOD_AO);
   return uErr;
@@ -4881,7 +4784,7 @@ err::Err AudioOut::write(maixcam2::Frame *frame, int32_t timeout_ms)
 {
   char bNeedExit;
   AX_BLK BlockId;
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err uErr;
   AX_U32 u32LeftLen;
   axAUDIO_FRAME_T stSrcFrame;
@@ -4927,7 +4830,7 @@ err::Err AudioOut::write(maixcam2::Frame *frame, int32_t timeout_ms)
       if (s32Ret != 0) break;
       AX_POOL_ReleaseBlock(stDstFrame.u32BlkId);
     }
-    maix::log::error("AX_AO_SendFrame audio_failed! ret = %#x",(ulong)s32Ret);
+    maix::log::error("AX_AO_SendFrame audio_failed! ret = %#x",s32Ret);
     AX_POOL_ReleaseBlock(stDstFrame.u32BlkId);
   }
   else {
@@ -4945,7 +4848,7 @@ done:
 err::Err AudioOut::clear(void)
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err uErr;
 
   AxModuleParam &axMod = AxModuleParam::getInstance();
@@ -4957,7 +4860,7 @@ err::Err AudioOut::clear(void)
   }
   else {
     uErr = err::ERR_RUNTIME;
-    maix::log::error("AX_AO_ClearDevBuf audio_failed! ret = %#x",(ulong)s32Ret);
+    maix::log::error("AX_AO_ClearDevBuf audio_failed! ret = %#x",s32Ret);
   }
   axMod.unlock(AX_MOD_AO);
   return uErr;
@@ -4971,7 +4874,7 @@ err::Err AudioOut::wait(int32_t timeout_ms)
 
 {
   char bNeedExit;
-  AX_S32 s32ret;
+  AX_S32 s32Ret;
   long ticksStart;
   long ticksNow;
   AX_AO_DEV_STATE_T stAoState;
@@ -4981,8 +4884,8 @@ err::Err AudioOut::wait(int32_t timeout_ms)
   axMod.lock(AX_MOD_AO);
   ticksStart = maix::time::ticks_ms();
   while (bNeedExit = maix::app::need_exit(), bNeedExit == 0) {
-    s32ret = AX_AO_QueryDevStat(aoMod->card,aoMod->device,&stAoState);
-    if (s32ret == 0) {
+    s32Ret = AX_AO_QueryDevStat(aoMod->card,aoMod->device,&stAoState);
+    if (s32Ret == 0) {
       if (stAoState.u32DevBusyNum == 0) {
         if (aoMod->param.insert_silence != false) break;
       }
@@ -5003,7 +4906,7 @@ err::Err AudioOut::wait(int32_t timeout_ms)
 err::Err AudioOut::state(int &total_num, int &free_num, int &busy_num, int &pcm_delay)
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err uErr;
   AX_AO_DEV_STATE_T stAoState;
 
@@ -5020,7 +4923,7 @@ err::Err AudioOut::state(int &total_num, int &free_num, int &busy_num, int &pcm_
   }
   else {
     uErr = err::ERR_RUNTIME;
-    maix::log::error("AX_AO_QueryDevStat audio_failed! ret = %#x",(ulong)s32Ret);
+    maix::log::error("AX_AO_QueryDevStat audio_failed! ret = %#x",s32Ret);
   }
   axMod.unlock(AX_MOD_AO);
   return uErr;
@@ -5033,7 +4936,7 @@ err::Err AudioOut::state(int &total_num, int &free_num, int &busy_num, int &pcm_
 int AudioOut::period_size(int size)
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   char *pcError;
   AX_AO_ATTR_T stAoAttr;
 
@@ -5069,13 +4972,13 @@ done:
     else {
       pcError = "AX_AO_DisableDev audio_failed! ret = %#x";
     }
-    maix::log::error(pcError,(ulong)s32Ret);
+    maix::log::error(pcError,s32Ret);
   }
   else {
 get_pub_failed:
     pcError = "AX_AO_GetPubAttr audio_failed! ret= %x";
 failed:
-    maix::log::error(pcError,(ulong)s32Ret);
+    maix::log::error(pcError,s32Ret);
     axMod.unlock(AX_MOD_AO);
   }
   return -1;
@@ -5088,7 +4991,7 @@ failed:
 int AudioOut::period_count(int count)
 
 {
-  uint s32Ret;
+  AX_S32 s32Ret;
   char *pcError;
   AX_AO_ATTR_T stAoAttr;
 
@@ -5124,13 +5027,13 @@ done:
     else {
       pcError = "AX_AO_DisableDev audio_failed! ret = %#x";
     }
-    maix::log::error(pcError,(ulong)s32Ret);
+    maix::log::error(pcError,s32Ret);
   }
   else {
 get_pub_failed:
     pcError = "AX_AO_GetPubAttr audio_failed! ret= %x";
 failed:
-    maix::log::error(pcError,(ulong)s32Ret);
+    maix::log::error(pcError,s32Ret);
     axMod.unlock(AX_MOD_AO);
   }
   return -1;
@@ -5145,18 +5048,16 @@ err::Err AudioIn::init(void)
 {
   AX_AUDIO_SAMPLE_RATE_E enOutSampleRate;
   AX_POOL PoolId;
-  uint s32Ret;
+  AX_S32 s32Ret;
   err::Err errRet;
-  int iVar1;
   AX_AGGRESSIVENESS_LEVEL_E vqeAggressivenessLevel;
   AX_U32 u32VadLevel;
   AX_AEC_MODE_E aecMode;
-  uint32_t _Var3;
   AX_S32 s32Tmp;
   AX_S16 s16Tmp;
   char *pcError;
   uint32_t periodSize;
-  ulong uError;
+  uint64_t uError;
   uint32_t periodCount;
   AX_AP_UPTALKVQE_ATTR_T *pstVqeAttr;
   AX_S32 vqeSampleRate;
@@ -5352,15 +5253,15 @@ err::Err AudioIn::init(void)
       aiMod->pool_id = PoolId;
       s32Ret = AX_AI_Init();
       if (s32Ret == 0) {
-        iVar1 = aiMod->param.rate;
-        if (iVar1 < 0x1f41) {
+        int aiRate = aiMod->param.rate;
+        if (aiRate < 8001) {
           audioSampleRate = AX_AUDIO_SAMPLE_RATE_8000;
         }
         else {
           audioSampleRate = AX_AUDIO_SAMPLE_RATE_16000;
-          if ((((16000 < iVar1) && (audioSampleRate = AX_AUDIO_SAMPLE_RATE_32000, 32000 < iVar1)) &&
-              (audioSampleRate = AX_AUDIO_SAMPLE_RATE_48000, 48000 < iVar1)) &&
-             (audioSampleRate = AX_AUDIO_SAMPLE_RATE_8000, iVar1 < 0x17701)) {
+          if ((((16000 < aiRate) && (audioSampleRate = AX_AUDIO_SAMPLE_RATE_32000, 32000 < aiRate)) &&
+              (audioSampleRate = AX_AUDIO_SAMPLE_RATE_48000, 48000 < aiRate)) &&
+             (audioSampleRate = AX_AUDIO_SAMPLE_RATE_8000, aiRate < 96001)) {
             audioSampleRate = AX_AUDIO_SAMPLE_RATE_96000;
           }
         }
@@ -5435,8 +5336,8 @@ err::Err AudioIn::init(void)
             sValue = "";
             maix::app::get_sys_config_kv("audio_in","ns_en",sValue,true);
             if (sValue != "") {
-              iVar1 = std::stoi(sValue,NULL,10);
-              if (iVar1 == 1) {
+              s32Tmp = std::stoi(sValue,NULL,10);
+              if (s32Tmp == 1) {
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","ns_level",sValue,true);
                 if (sValue != "") {
@@ -5448,8 +5349,8 @@ err::Err AudioIn::init(void)
             sValue = "";
             maix::app::get_sys_config_kv("audio_in","vad_en",sValue,true);
             if (sValue != "") {
-              iVar1 = std::stoi(sValue,NULL,10);
-              if (iVar1 == 1) {
+              s32Tmp = std::stoi(sValue,NULL,10);
+              if (s32Tmp == 1) {
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","vad_level",sValue,true);
                 if (sValue != "") {
@@ -5461,8 +5362,8 @@ err::Err AudioIn::init(void)
             sValue = "";
             maix::app::get_sys_config_kv("audio_in","agc_en",sValue,true);
             if (sValue != "") {
-              iVar1 = std::stoi(sValue,NULL,10);
-              if (iVar1 == 1) {
+              s32Tmp = std::stoi(sValue,NULL,10);
+              if (s32Tmp == 1) {
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","agc_target_level",sValue,true);
                 if (sValue != "") {
@@ -5480,8 +5381,8 @@ err::Err AudioIn::init(void)
             sValue = "";
             maix::app::get_sys_config_kv("audio_in","aec_en",sValue,true);
             if (sValue != "") {
-              iVar1 = std::stoi(sValue,NULL,10);
-              if (iVar1 == 1) {
+              s32Tmp = std::stoi(sValue,NULL,10);
+              if (s32Tmp == 1) {
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","aec_mode",sValue,true);
                 if (sValue != "") {
@@ -5491,14 +5392,14 @@ err::Err AudioIn::init(void)
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","aec_float_level",sValue,true);
                 if (sValue != "") {
-                  _Var3 = std::stoi(sValue,NULL,10);
-                  stVqeAttr.stAecCfg.stAecFloatCfg.enSuppressionLevel = (AX_SUPPRESSION_LEVEL_E)_Var3;
+                  s32Tmp = std::stoi(sValue,NULL,10);
+                  stVqeAttr.stAecCfg.stAecFloatCfg.enSuppressionLevel = (AX_SUPPRESSION_LEVEL_E)s32Tmp;
                 }
                 sValue = "";
                 maix::app::get_sys_config_kv("audio_in","aec_fixed_level",sValue,true);
                 if (sValue != "") {
-                  _Var3 = std::stoi(sValue,NULL,10);
-                  stVqeAttr.stAecCfg.stAecFixedCfg.eRoutingMode = (AX_ROUTING_MODE_E)_Var3;
+                  s32Tmp = std::stoi(sValue,NULL,10);
+                  stVqeAttr.stAecCfg.stAecFixedCfg.eRoutingMode = (AX_ROUTING_MODE_E)s32Tmp;
                 }
               }
             }
@@ -5510,7 +5411,7 @@ err::Err AudioIn::init(void)
               s32Ret = AX_AI_SetUpTalkVqeAttr
                                  (aiMod->card,aiMod->device,pstVqeAttr);
               if (s32Ret != 0) {
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_AI_SetUpTalkVqeAttr audio_failed! ret = %#x";
                 goto error;
               }
@@ -5530,8 +5431,8 @@ err::Err AudioIn::init(void)
             sValue = "";
             maix::app::get_sys_config_kv("audio","hpf_en",sValue,true);
             if (sValue != "") {
-              iVar1 = std::stoi(sValue,NULL,10);
-              if (iVar1 == 1) {
+              s32Tmp = std::stoi(sValue,NULL,10);
+              if (s32Tmp == 1) {
                 aiMod->hpf_en = true;
 		sValue = "";
                 maix::app::get_sys_config_kv("audio","hpf_freq",sValue,true);
@@ -5569,8 +5470,8 @@ acodec_lpf_init:
               sValue = "";
               maix::app::get_sys_config_kv("audio","lpf_en",sValue,true);
               if (sValue != "") {
-                iVar1 = std::stoi(sValue,NULL,10);
-                if (iVar1 == 1) {
+                s32Tmp = std::stoi(sValue,NULL,10);
+                if (s32Tmp == 1) {
                   aiMod->lpf_en = true;
                   sValue = "";
                   maix::app::get_sys_config_kv("audio","lpf_freq",sValue,true);
@@ -5642,8 +5543,8 @@ ai_enable_ok:
 		      axMod.unlock(AX_MOD_AI);
                       goto done;
                     }
-                    iVar1 = std::stoi(sValue,NULL,10);
-                    if (iVar1 != 1) goto ai_check_aed;
+                    s32Tmp = std::stoi(sValue,NULL,10);
+                    if (s32Tmp != 1) goto ai_check_aed;
                     aiMod->aed_en = true;
                     stAedAttr[0].bDbDetection = AX_TRUE;
 ai_enable_aed:
@@ -5652,38 +5553,38 @@ ai_enable_aed:
                     if (s32Ret == 0) {
                       s32Ret = AX_AI_EnableAed(aiMod->card,aiMod->device);
                       if (s32Ret == 0) goto ai_enable_ok;
-                      uError = (ulong)s32Ret;
+                      uError = s32Ret;
                       pcError = "AX_AI_EnableAed audio_failed! ret = %#x";
                     }
                     else {
-                      uError = (ulong)s32Ret;
+                      uError = s32Ret;
                       pcError = "AX_AI_SetAedAttr audio_failed! ret = %#x";
                     }
                   }
                   else {
-                    uError = (ulong)s32Ret;
+                    uError = s32Ret;
                     pcError = "AX_AI_EnableResample audio_failed! ret = %#x";
                   }
                 }
                 else {
-                  uError = (ulong)s32Ret;
+                  uError = s32Ret;
                   pcError = "AX_AI_EnableDev audio_failed! ret = %#x";
                 }
               }
               else {
-                iVar1 = std::stoi(sValue,NULL,10);
-                if (iVar1 != 1) goto acodec_eq_check;
+                s32Tmp = std::stoi(sValue,NULL,10);
+                if (s32Tmp != 1) goto acodec_eq_check;
                 aiMod->eq_en = true;
 acodec_eq_enable:
                 s32Ret = AX_ACODEC_RxEqSetAttr(aiMod->card,&stEqAttr);
                 if (s32Ret == 0) {
                   s32Ret = AX_ACODEC_RxEqEnable(aiMod->card);
                   if (s32Ret == 0) goto ai_enable_dev;
-                  uError = (ulong)s32Ret;
+                  uError = s32Ret;
                   pcError = "AX_ACODEC_RxEqEnable audio_failed! ret = %#x";
                 }
                 else {
-                  uError = (ulong)s32Ret;
+                  uError = s32Ret;
                   pcError = "AX_ACODEC_RxEqSetAttr audio_failed! ret = %#x";
                 }
               }
@@ -5694,28 +5595,28 @@ acodec_eq_enable:
                 s32Ret = AX_ACODEC_RxHpfEnable(aiMod->card);
                 if (s32Ret == 0) goto acodec_lpf_init;
 hpf_en_failed:
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_ACODEC_RxHpfEnable audio_failed! ret = %#x";
               }
               else {
 hpf_setattr_failed:
-                uError = (ulong)s32Ret;
+                uError = s32Ret;
                 pcError = "AX_ACODEC_RxHpfSetAttr audio_failed! ret = %#x";
               }
             }
           }
           else {
-            uError = (ulong)s32Ret;
+            uError = s32Ret;
             pcError = "AX_AI_AttachPool audio_failed! ret = %#x";
           }
         }
         else {
-          uError = (ulong)s32Ret;
+          uError = s32Ret;
           pcError = "AX_AI_SetPubAttr audio_failed! ret = %#x";
         }
       }
       else {
-        uError = (ulong)s32Ret;
+        uError = s32Ret;
         pcError = "AX_AI_Init FAILED! ret:0x%x";
       }
 error:
@@ -5735,19 +5636,19 @@ finish:
   if (aiMod->eq_en != false) {
     s32Ret = AX_ACODEC_RxEqDisable(aiMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_RxEqDisable audio_failed! ret= %x",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_RxEqDisable audio_failed! ret= %x",s32Ret);
     }
   }
   if (aiMod->lpf_en != false) {
     s32Ret = AX_ACODEC_RxLpfDisable(aiMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_RxLpfDisable audio_failed! ret= %x\n",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_RxLpfDisable audio_failed! ret= %x\n",s32Ret);
     }
   }
   if (aiMod->hpf_en != false) {
     s32Ret = AX_ACODEC_RxHpfDisable(aiMod->card);
     if (s32Ret != 0) {
-      maix::log::error("AX_ACODEC_RxHpfDisable audio_failed! ret= %x\n",(ulong)s32Ret);
+      maix::log::error("AX_ACODEC_RxHpfDisable audio_failed! ret= %x\n",s32Ret);
     }
   }
   axMod.unlock(AX_MOD_AI);
@@ -5773,7 +5674,7 @@ err::Err AudioIn::reset(void)
 err::Err ax_jpg_enc_init(void)
 
 {
-  uint iRet;
+  uint32_t iRet;
   SYS *sysMod;
   VENC *vencMod;
 
@@ -5805,12 +5706,12 @@ Frame * ax_jpg_enc_once(Frame *frame,int quality)
 {
   int initRet;
   AX_S32 s32Ret;
-  uint u32Ret;
-  ulong uTmp;
+  uint32_t u32Ret;
+  uint64_t uTmp;
   char *pcError;
   Frame *out_frame;
   AX_VIDEO_FRAME_T *ptFrame;
-  uint u32Invert;
+  uint32_t u32Invert;
   AX_U64 uPhyAddr;
   AX_U8 *pVirAddr;
   AX_VIDEO_FRAME_T stSrcFrame;
@@ -5845,7 +5746,7 @@ Frame * ax_jpg_enc_once(Frame *frame,int quality)
      ptFrame = &stSrcFrame, (uTmp & 1) != 0)) {
     ptFrame = &stDstFrame;
     u32Invert = __ax_ivps_csc_tdp(&stSrcFrame,ptFrame,AX_FORMAT_YUV420_SEMIPLANAR);
-    uTmp = (ulong)u32Invert;
+    uTmp = u32Invert;
     if (u32Invert != 0) {
       pcError = "ivps invert format failed! ret:%#x";
       goto failed;
@@ -5869,7 +5770,7 @@ Frame * ax_jpg_enc_once(Frame *frame,int quality)
     stJpegParam.pu8Addr = pVirAddr;
     stJpegParam.u32OutBufSize = ptFrame->u32FrameSize;
     u32Ret = AX_VENC_JpegEncodeOneFrame(&stJpegParam);
-    uTmp = (ulong)u32Ret;
+    uTmp = u32Ret;
     if (u32Ret == 0) {
       out_frame = new Frame(stJpegParam.pu8Addr,stJpegParam.u32Len,FRAME_FROM_MALLOC);
       if (u32Invert != 0) {
@@ -5888,7 +5789,7 @@ Frame * ax_jpg_enc_once(Frame *frame,int quality)
     pcError = "jpg encode failed, ret:%#x";
   }
   else {
-    uTmp = (ulong)ptFrame->u32FrameSize;
+    uTmp = ptFrame->u32FrameSize;
     pcError = "alloc mem err, size(%d).";
   }
 failed:
