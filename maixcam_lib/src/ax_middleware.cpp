@@ -4331,10 +4331,12 @@ failed:
     stPoolConfig.PartitionName[0x1d] = aoMod->param.pool_cfg.PartitionName[0x1d];
     stPoolConfig.PartitionName[0x1e] = aoMod->param.pool_cfg.PartitionName[0x1e];
     stPoolConfig.PartitionName[0x1f] = aoMod->param.pool_cfg.PartitionName[0x1f];
+#if 0
     stPoolConfig.PartitionName[0x20] = aoMod->param.pool_cfg.PartitionName[0x20];
     stPoolConfig.PartitionName[0x21] = aoMod->param.pool_cfg.PartitionName[0x21];
     stPoolConfig.PartitionName[0x22] = aoMod->param.pool_cfg.PartitionName[0x22];
     stPoolConfig.PartitionName[0x23] = aoMod->param.pool_cfg.PartitionName[0x23];
+#endif
 
     stPoolConfig.PartitionName[0x14] = aoMod->param.pool_cfg.PartitionName[0x14];
     stPoolConfig.PartitionName[0x15] = aoMod->param.pool_cfg.PartitionName[0x15];
@@ -4367,10 +4369,12 @@ failed:
     stPoolConfig.PoolName[0x1d] = aoMod->param.pool_cfg.PoolName[0x1d];
     stPoolConfig.PoolName[0x1e] = aoMod->param.pool_cfg.PoolName[0x1e];
     stPoolConfig.PoolName[0x1f] = aoMod->param.pool_cfg.PoolName[0x1f];
+#if 0
     stPoolConfig.PoolName[0x20] = aoMod->param.pool_cfg.PoolName[0x20];
     stPoolConfig.PoolName[0x21] = aoMod->param.pool_cfg.PoolName[0x21];
     stPoolConfig.PoolName[0x22] = aoMod->param.pool_cfg.PoolName[0x22];
     stPoolConfig.PoolName[0x23] = aoMod->param.pool_cfg.PoolName[0x23];
+#endif
 
     stPoolConfig.PoolName[0x14] = aoMod->param.pool_cfg.PoolName[0x14];
     stPoolConfig.PoolName[0x15] = aoMod->param.pool_cfg.PoolName[0x15];
@@ -5193,10 +5197,12 @@ err::Err AudioIn::init(void)
       stPoolConfig.PartitionName[0x1d] = aiMod->param.pool_cfg.PartitionName[0x1d];
       stPoolConfig.PartitionName[0x1e] = aiMod->param.pool_cfg.PartitionName[0x1e];
       stPoolConfig.PartitionName[0x1f] = aiMod->param.pool_cfg.PartitionName[0x1f];
+#if 0
       stPoolConfig.PartitionName[0x20] = aiMod->param.pool_cfg.PartitionName[0x20];
       stPoolConfig.PartitionName[0x21] = aiMod->param.pool_cfg.PartitionName[0x21];
       stPoolConfig.PartitionName[0x22] = aiMod->param.pool_cfg.PartitionName[0x22];
       stPoolConfig.PartitionName[0x23] = aiMod->param.pool_cfg.PartitionName[0x23];
+#endif
 
       stPoolConfig.PartitionName[0x14] = aiMod->param.pool_cfg.PartitionName[0x14];
       stPoolConfig.PartitionName[0x15] = aiMod->param.pool_cfg.PartitionName[0x15];
@@ -5229,10 +5235,12 @@ err::Err AudioIn::init(void)
       stPoolConfig.PoolName[0x1d] = aiMod->param.pool_cfg.PoolName[0x1d];
       stPoolConfig.PoolName[0x1e] = aiMod->param.pool_cfg.PoolName[0x1e];
       stPoolConfig.PoolName[0x1f] = aiMod->param.pool_cfg.PoolName[0x1f];
+#if 0
       stPoolConfig.PoolName[0x20] = aiMod->param.pool_cfg.PoolName[0x20];
       stPoolConfig.PoolName[0x21] = aiMod->param.pool_cfg.PoolName[0x21];
       stPoolConfig.PoolName[0x22] = aiMod->param.pool_cfg.PoolName[0x22];
       stPoolConfig.PoolName[0x23] = aiMod->param.pool_cfg.PoolName[0x23];
+#endif
 
       stPoolConfig.PoolName[0x14] = aiMod->param.pool_cfg.PoolName[0x14];
       stPoolConfig.PoolName[0x15] = aiMod->param.pool_cfg.PoolName[0x15];
