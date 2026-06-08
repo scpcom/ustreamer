@@ -71,6 +71,7 @@ ifneq ($(MK_WITH_AX),)
 	+ $(MAKE) kvm_vin
 	+ $(MAKE) kvm_vision
 	+ $(MAKE) maixcam_lib
+	+ $(MAKE) ms_asr
 endif
 
 
@@ -102,6 +103,10 @@ maixcam_lib:
 	$(MAKE) -C maixcam_lib
 	$(ECHO) ln -sf maixcam_lib/*.so .
 
+ms_asr:
+	$(MAKE) -C ms_asr
+	$(ECHO) ln -sf ms_asr/*.so .
+
 
 install: all
 	$(MAKE) -C src install
@@ -115,6 +120,7 @@ ifneq ($(MK_WITH_AX),)
 	$(MAKE) -C kvm_vin install
 	$(MAKE) -C kvm_vision install
 	$(MAKE) -C maixcam_lib install
+	$(MAKE) -C ms_asr install
 endif
 	mkdir -p $(R_DESTDIR)$(MANPREFIX)/man1
 	for man in $(shell ls man); do \
@@ -183,6 +189,7 @@ clean:
 	$(MAKE) -C kvm_vin clean
 	$(MAKE) -C kvm_vision clean
 	$(MAKE) -C maixcam_lib clean
+	$(MAKE) -C ms_asr clean
 
 
 .PHONY: python janus linters
