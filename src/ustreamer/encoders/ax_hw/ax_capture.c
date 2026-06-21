@@ -618,40 +618,47 @@ static bool AX_CAP_IVPS_Init(us_ax_capture_s *ax_cap)
     s32Ret = AX_IVPS_CreateGrp(0,&stGrpAttr);
     if (s32Ret == 0) {
       memset(&stPipelineAttr, 0, sizeof(stPipelineAttr));
+
+      stPipelineAttr.tFilter[0][0].bEngage = AX_FALSE;
+      stPipelineAttr.tFilter[0][0].eEngine = AX_IVPS_ENGINE_TDP;
+      stPipelineAttr.tFilter[0][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR;
       stPipelineAttr.tFilter[0][0].nDstPicWidth = (AX_U16)ax_cap->mode.width;
       stPipelineAttr.tFilter[0][0].nDstPicHeight = (AX_U16)ax_cap->mode.height;
       stPipelineAttr.tFilter[0][0].nDstPicStride =
            (stPipelineAttr.tFilter[0][0].nDstPicWidth + 0xf) & 0xfff0;
-      stPipelineAttr.tFilter[1][1].nDstPicWidth = ax_cap->ivps_mode.width;
-      stPipelineAttr.tFilter[1][1].nDstPicHeight = ax_cap->ivps_mode.height;
-      stPipelineAttr.tFilter[1][1].nDstPicStride = stPipelineAttr.tFilter[1][1].nDstPicWidth;
       stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate = (AX_F32)(int)ax_cap->mode.fps;
-      stPipelineAttr.tFilter[1][1].eDstPicFormat = AX_FORMAT_RGB565;
-      stPipelineAttr.nOutChnNum = '\x01';
-      stPipelineAttr.nInDebugFifoDepth = 0;
-      stPipelineAttr.nOutFifoDepth[0] = '\x01';
-      stPipelineAttr.nOutFifoDepth[1] = '\0';
-      stPipelineAttr.nOutFifoDepth[2] = '\0';
-      stPipelineAttr.nOutFifoDepth[3] = '\0';
-      stPipelineAttr.tFilter[0][0].eEngine = AX_IVPS_ENGINE_TDP;
-      stPipelineAttr.tFilter[0][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR;
-      stPipelineAttr.tFilter[1][0].bEngage = AX_TRUE;
-      stPipelineAttr.tFilter[1][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR;
-      stPipelineAttr.tFilter[1][1].bEngage = AX_TRUE;
-      stPipelineAttr.tFilter[1][1].eEngine = AX_IVPS_ENGINE_TDP;
       stPipelineAttr.tFilter[0][0].tFRC.fDstFrameRate =
            stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate;
+
+      stPipelineAttr.tFilter[1][0].bEngage = AX_TRUE;
+      stPipelineAttr.tFilter[1][0].eEngine = AX_IVPS_ENGINE_SCL;
+      stPipelineAttr.tFilter[1][0].eDstPicFormat = AX_FORMAT_YUV420_SEMIPLANAR;
+      stPipelineAttr.tFilter[1][0].nDstPicWidth = stPipelineAttr.tFilter[0][0].nDstPicWidth;
+      stPipelineAttr.tFilter[1][0].nDstPicHeight = stPipelineAttr.tFilter[0][0].nDstPicHeight;
+      stPipelineAttr.tFilter[1][0].nDstPicStride = stPipelineAttr.tFilter[0][0].nDstPicStride;
       stPipelineAttr.tFilter[1][0].tFRC.fSrcFrameRate =
            stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate;
       stPipelineAttr.tFilter[1][0].tFRC.fDstFrameRate =
            stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate;
-      stPipelineAttr.tFilter[1][0].nDstPicWidth = stPipelineAttr.tFilter[0][0].nDstPicWidth;
-      stPipelineAttr.tFilter[1][0].nDstPicHeight = stPipelineAttr.tFilter[0][0].nDstPicHeight;
-      stPipelineAttr.tFilter[1][0].nDstPicStride = stPipelineAttr.tFilter[0][0].nDstPicStride;
+
+      stPipelineAttr.tFilter[1][1].bEngage = AX_TRUE;
+      stPipelineAttr.tFilter[1][1].eEngine = AX_IVPS_ENGINE_TDP;
+      stPipelineAttr.tFilter[1][1].eDstPicFormat = AX_FORMAT_RGB565;
+      stPipelineAttr.tFilter[1][1].nDstPicWidth = ax_cap->ivps_mode.width;
+      stPipelineAttr.tFilter[1][1].nDstPicHeight = ax_cap->ivps_mode.height;
+      stPipelineAttr.tFilter[1][1].nDstPicStride = stPipelineAttr.tFilter[1][1].nDstPicWidth;
       stPipelineAttr.tFilter[1][1].tFRC.fSrcFrameRate =
            stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate;
       stPipelineAttr.tFilter[1][1].tFRC.fDstFrameRate =
            stPipelineAttr.tFilter[0][0].tFRC.fSrcFrameRate;
+
+      stPipelineAttr.nOutChnNum = 1;
+      stPipelineAttr.nInDebugFifoDepth = 0;
+      stPipelineAttr.nOutFifoDepth[0] = 1;
+      stPipelineAttr.nOutFifoDepth[1] = 0;
+      stPipelineAttr.nOutFifoDepth[2] = 0;
+      stPipelineAttr.nOutFifoDepth[3] = 0;
+
       s32Ret = AX_IVPS_SetPipelineAttr(ax_cap->ivps_grp,&stPipelineAttr);
       if (s32Ret == 0) {
         s32Ret = AX_IVPS_EnableChn(ax_cap->ivps_grp,0);
