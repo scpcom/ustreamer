@@ -80,13 +80,26 @@ err::Err __sample_fb_config(SAMPLE_FB_CONFIG_S *pstFbConfig)
     stFbVarInfo.xres = fbWidth;
     stFbVarInfo.yres = fbHeight;
     stFbVarInfo.xres_virtual = fbWidth;
-    stFbVarInfo.red.offset = red_length;
-    stFbVarInfo.red.length = red_length;
-    stFbVarInfo.green.length = red_length;
-    stFbVarInfo.blue.offset = transp_offset;
-    stFbVarInfo.blue.length = transp_length;
-    stFbVarInfo.transp.offset = red_offset;
-    stFbVarInfo.transp.length = red_length;
+    if (fbFmt == AX_FORMAT_RGB565) {
+      stFbVarInfo.bits_per_pixel = 16;
+      stFbVarInfo.yres_virtual = fbHeight;
+      stFbVarInfo.red.offset = 11;
+      stFbVarInfo.red.length = 5;
+      stFbVarInfo.green.offset = 5;
+      stFbVarInfo.green.length = 6;
+      stFbVarInfo.blue.offset = 0;
+      stFbVarInfo.blue.length = 5;
+      stFbVarInfo.transp.offset = 0;
+      stFbVarInfo.transp.length = 0;
+    } else {
+      stFbVarInfo.red.offset = red_length;
+      stFbVarInfo.red.length = red_length;
+      stFbVarInfo.green.length = red_length;
+      stFbVarInfo.blue.offset = transp_offset;
+      stFbVarInfo.blue.length = transp_length;
+      stFbVarInfo.transp.offset = red_offset;
+      stFbVarInfo.transp.length = red_length;
+    }
     iRet = ioctl(__fd,FBIOPUT_VSCREENINFO,&stFbVarInfo);
     if (iRet < 0) {
       pcError = "put variable screen info to fb%d failed\n";
@@ -160,6 +173,11 @@ AX_U32 SAMPLE_CALC_IMAGE_SIZE
   else {
     if (eImgType == AX_FORMAT_YUV444_PACKED) {
       u32Bpp = 24;
+      goto done;
+    }
+    if (eImgType == AX_FORMAT_RGB565 ||
+        eImgType == AX_FORMAT_BGR565) {
+      u32Bpp = 16;
       goto done;
     }
     if (eImgType - AX_FORMAT_RGB888 < 0x31) {
@@ -373,8 +391,10 @@ Frame::Frame
       }
     }
     else {
-      if ((srcImgFormat & ~AX_FORMAT_YUV420_SEMIPLANAR_VU) != AX_FORMAT_RGB888) {
+      if ((srcImgFormat & ~AX_FORMAT_YUV420_SEMIPLANAR_VU) != AX_FORMAT_RGB888 &&
+          srcImgFormat != AX_FORMAT_RGB565 && srcImgFormat != AX_FORMAT_BGR565) {
 not_impl:
+        maix::log::error("[%s][%d] frame format %d not implemented", __func__, __LINE__, srcImgFormat);
         maix::err::check_raise(err::ERR_NOT_IMPL,"frame format not implemented");
         goto done;
       }
@@ -1730,6 +1750,13 @@ err::Err VI::add_channel(int ch, int width, int height, AX_IMG_FORMAT_E format, 
         CurIvpsChn = CurIvpsChn + 1;
       }
       NumIvpsChn = NumIvpsChn + 1;
+      if (width * height < 352 * 288 && format == AX_FORMAT_BGR888) format = AX_FORMAT_RGB565;
+      if (format == AX_FORMAT_RGB565) {
+        u16DstWidth = height;
+        u16DstHeight = width;
+        width = u16DstWidth;
+        height = u16DstHeight;
+      }
       viMod->chn_out[ch].w = width;
       viMod->chn_out[ch].h = height;
       viMod->chn_out[ch].fmt = format;
@@ -1819,11 +1846,21 @@ no_fit:
       }
       uCurIvpsChn = 0;
       (viMod->stPipelineAttr).nOutFifoDepth[ch] = 1;
-      if (FilterChn == 1 && viMod->cams[0].eSnsType == SAMPLE_SNS_LT6911) {
+      if (FilterChn > 0 && viMod->cams[0].eSnsType == SAMPLE_SNS_LT6911) {
         (viMod->stPipelineAttr).tFilter[0][0].bEngage = AX_FALSE;
 
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eEngine = AX_IVPS_ENGINE_SCL;
         (viMod->stPipelineAttr).tFilter[FilterChn][0].eSclType = AX_IVPS_SCL_TYPE_AUTO;
+      }
+      if (FilterChn == 2 && viMod->cams[0].eSnsType == SAMPLE_SNS_LT6911) {
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].bCrop = AX_FALSE;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nW = 0;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nH = 0;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nX = 0;
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].tCropRect.nY = 0;
+      }
+      if ((viMod->stPipelineAttr).tFilter[FilterChn][1].eDstPicFormat == AX_FORMAT_RGB565) {
+        (viMod->stPipelineAttr).tFilter[FilterChn][1].tTdpCfg.eRotation = (AX_IVPS_ROTATION_E)(270 / 90);
       }
       s32Ret = AX_IVPS_SetPipelineAttr(IvpsGrp,&viMod->stPipelineAttr);
       if (s32Ret == 0) {
@@ -2425,6 +2462,10 @@ format_failed:
     }
     s32Ret = SAMPLE_COMM_VO_StartVO(&pstVoConfig->vo_cfg);
     uError = s32Ret;
+    if (s32Ret != 0) {
+        printf("WARN: SAMPLE_COMM_VO_StartVO failed, i:%d, s32Ret:0x%x\n", uVoDevIndex, s32Ret);
+        s32Ret = 0;
+    }
     if (s32Ret == 0) {
       s32Ret = AX_IVPS_Init();
       uError = s32Ret;
@@ -2952,12 +2993,14 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
   AX_U64 uPhyAddr;
   AX_VOID *pVirAddr;
   fb_fix_screeninfo stFbFixInfo;
+  fb_var_screeninfo stFbVarInfo;
   AX_VIDEO_FRAME_T stVideoFrame;
   axVIDEO_FRAME_T stEmptyFrame;
   axVIDEO_FRAME_T stDstVideoFrame;
   AX_U64 pDstVirAddr;
   AX_U32 u32FrameSize;
   AX_U64 uDstPhyAddr;
+  int doFlipAndRotationTdp;
 
   if (frame == (Frame *)0x0) {
     return err::ERR_ARGS;
@@ -2972,6 +3015,15 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
     if (iRet < 0) {
       uErr = err::ERR_RUNTIME;
       maix::log::error("get fix screen info from fb%d failed\n",
+                       voMod->fb_fd[ch]);
+    }
+    else {
+      uErr = err::ERR_NONE;
+    }
+    iRet = ioctl(voMod->fb_fd[ch],FBIOGET_VSCREENINFO,&stFbVarInfo);
+    if (iRet < 0) {
+      uErr = err::ERR_RUNTIME;
+      maix::log::error("get var screen info from fb%d failed\n",
                        voMod->fb_fd[ch]);
     }
     else {
@@ -3000,8 +3052,17 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
     u32FrameSize = SAMPLE_CALC_IMAGE_SIZE
                              (stVideoFrame.u32Height,u32FrameSize,stVideoFrame.enImgFormat,
                               stVideoFrame.u32Height);
-    u32Tmp = AX_SYS_MemAllocCached(&uPhyAddr,&pVirAddr,u32FrameSize,0x1000,(AX_S8 *)"vpp crop reisze");
-    if (u32Tmp == 0) {
+    doFlipAndRotationTdp = (stVideoFrame.enImgFormat != AX_FORMAT_RGB565 && stVideoFrame.enImgFormat != AX_FORMAT_BGR565);
+    if (doFlipAndRotationTdp) {
+      u32Tmp = AX_SYS_MemAllocCached(&uPhyAddr,&pVirAddr,u32FrameSize,0x1000,(AX_S8 *)"vpp crop reisze");
+      pDstVirAddr = 0;
+      uDstPhyAddr = 0;
+    } else {
+      u32Tmp = 0;
+      pDstVirAddr = stVideoFrame.u64VirAddr[0];
+      uDstPhyAddr = 0;
+    }
+    if (doFlipAndRotationTdp && u32Tmp == 0) {
       AX_SYS_MflushCache(stVideoFrame.u64PhyAddr[0],(AX_VOID *)stVideoFrame.u64VirAddr[0],
                          stVideoFrame.u32FrameSize);
       stDstVideoFrame.enImgFormat = stVideoFrame.enImgFormat;
@@ -3014,18 +3075,37 @@ err::Err VO::push(int layer, int ch, maixcam2::Frame *frame)
         u32FrameSize = stDstVideoFrame.u32FrameSize;
         pDstVirAddr = stDstVideoFrame.u64VirAddr[0];
         uDstPhyAddr = stDstVideoFrame.u64PhyAddr[0];
+      } else {
+        AX_SYS_MemFree(uDstPhyAddr,(AX_VOID *)pDstVirAddr);
+      }
+    }
+    if (pDstVirAddr != 0) {
+      if (u32Tmp == 0) {
         pFbVirAddr = mmap(NULL, stFbFixInfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED ,voMod->fb_fd[ch],0)
         ;
         if (pFbVirAddr == (void *)0xffffffffffffffff) {
           uErr = err::ERR_RUNTIME;
           maix::log::error("map fb%d failed\n",voMod->fb_fd[ch]);
         }
-        memcpy(pFbVirAddr,(void *)pDstVirAddr,(ulong)u32FrameSize);
-        AX_SYS_MemFree(uDstPhyAddr,(AX_VOID *)pDstVirAddr);
+        if (u32FrameSize > stFbFixInfo.smem_len) {
+          char* pFbV = (char *)pFbVirAddr;
+          char* pDat = (char *)pDstVirAddr;
+          uint32_t y = 0;
+          while (y < stFbVarInfo.yres_virtual) {
+            memcpy(pFbV, pDat, stFbVarInfo.xres_virtual * 2);
+            pFbV += stFbVarInfo.xres_virtual * 2;
+            pDat += stVideoFrame.u32Width * 2;
+            y++;
+          }
+        } else {
+          memcpy(pFbVirAddr,(void *)pDstVirAddr,(ulong)u32FrameSize);
+        }
+        if (doFlipAndRotationTdp) {
+          AX_SYS_MemFree(uDstPhyAddr,(AX_VOID *)pDstVirAddr);
+        }
         munmap(pFbVirAddr,stFbFixInfo.smem_len);
         goto done;
       }
-      AX_SYS_MemFree(uPhyAddr,pVirAddr);
       pcError = "AX_IVPS_FlipAndRotationTdp failed, ret = %#x";
     }
     else {

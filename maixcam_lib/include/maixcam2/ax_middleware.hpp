@@ -475,6 +475,10 @@ namespace maix::middleware::maixcam2 {
         switch (format) {
             case AX_FORMAT_YUV400:
                 return image::FMT_GRAYSCALE;
+            case AX_FORMAT_RGB565:
+                return image::FMT_RGB565;
+            case AX_FORMAT_BGR565:
+                return image::FMT_BGR565;
             case AX_FORMAT_RGB888:
                 return image::FMT_BGR888;   // actualy is rgb888
             case AX_FORMAT_BGR888:
@@ -497,6 +501,10 @@ namespace maix::middleware::maixcam2 {
         {
         case image::FMT_GRAYSCALE:
             return AX_FORMAT_YUV400;
+        case image::FMT_RGB565:
+            return AX_FORMAT_RGB565;
+        case image::FMT_BGR565:
+            return AX_FORMAT_BGR565;
         case image::FMT_RGB888:
             return AX_FORMAT_BGR888;       // actualy is rgb888
         case image::FMT_BGR888:
